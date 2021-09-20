@@ -1,127 +1,115 @@
-import {eEthereumNetwork} from './helpers/types-common';
-// @ts-ignore
-import {accounts} from './test-wallets.js';
-import {BUIDLEREVM_CHAINID, COVERAGE_CHAINID} from './helpers/constants';
-import {HardhatUserConfig} from 'hardhat/config';
-
+import '@nomiclabs/hardhat-ethers';
+import '@nomiclabs/hardhat-solhint';
+import 'dotenv/config';
+import 'hardhat-deploy';
+import 'hardhat-gas-reporter';
 import 'hardhat-typechain';
+import {HardhatUserConfig} from 'hardhat/config';
 import 'solidity-coverage';
-import '@nomiclabs/hardhat-waffle';
-import '@nomiclabs/hardhat-etherscan';
-import path from 'path';
-import fs from 'fs';
+import getAccount from './utils/getAccounts';
+import getNodeUrl from './utils/getNodeUrl';
 
 const SKIP_LOAD = process.env.SKIP_LOAD === 'true';
 
 // Prevent to load scripts before compilation and typechain
 if (!SKIP_LOAD) {
-  ['misc', 'migrations', 'deployments'].forEach((folder) => {
-    const tasksPath = path.join(__dirname, 'tasks', folder);
-    fs.readdirSync(tasksPath)
-      .filter((pth) => pth.includes('.ts'))
-      .forEach((task) => {
-        require(`${tasksPath}/${task}`);
-      });
-  });
+  require('./tasks/index.ts');
 }
 
-const DEFAULT_BLOCK_GAS_LIMIT = 12500000;
-const DEFAULT_GAS_PRICE = 50000000000; // 50 gwei
-const HARDFORK = 'istanbul';
-const INFURA_KEY = process.env.INFURA_KEY || '';
-const ALCHEMY_KEY = process.env.ALCHEMY_KEY || '';
-const ETHERSCAN_KEY = process.env.ETHERSCAN_KEY || '';
-const MNEMONIC_PATH = "m/44'/60'/0'/0";
-const MNEMONIC = process.env.MNEMONIC || '';
-const MAINNET_FORK = process.env.MAINNET_FORK === 'true';
-
-const mainnetFork = MAINNET_FORK
-  ? {
-      blockNumber: 11366117,
-      url: ALCHEMY_KEY
-        ? `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_KEY}`
-        : `https://main.infura.io/v3/${INFURA_KEY}`,
-    }
-  : undefined;
-
-const getCommonNetworkConfig = (networkName: eEthereumNetwork, networkId: number) => {
-  return {
-    url: ALCHEMY_KEY
-      ? `https://eth-${
-          networkName === 'main' ? 'mainnet' : networkName
-        }.alchemyapi.io/v2/${ALCHEMY_KEY}`
-      : `https://${networkName}.infura.io/v3/${INFURA_KEY}`,
-    hardfork: HARDFORK,
-    blockGasLimit: DEFAULT_BLOCK_GAS_LIMIT,
-    gasMultiplier: DEFAULT_GAS_PRICE,
-    chainId: networkId,
-    accounts: {
-      mnemonic: MNEMONIC,
-      path: MNEMONIC_PATH,
-      initialIndex: 0,
-      count: 20,
-    },
-  };
-};
+// Turn off auto mining mode to add some delay to transactions
+const AUTO_MINE_OFF = process.env.AUTO_MINE_OFF === 'true';
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: '0.7.5',
-    settings: {
-      optimizer: {enabled: true, runs: 200},
-      evmVersion: 'istanbul',
+    compilers: [
+      {
+        version: '0.7.5',
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      },
+    ],
+  },
+  networks: {
+    hardhat: {
+      accounts: getAccount(),
+      mining: AUTO_MINE_OFF
+        ? {
+            auto: false,
+            interval: [3000, 6000],
+          }
+        : undefined,
+    },
+    localhost: {
+      url: getNodeUrl('localhost'),
+      accounts: getAccount(),
+    },
+    mainnet: {
+      url: getNodeUrl('mainnet'),
+      accounts: getAccount('mainnet'),
+    },
+    rinkeby: {
+      url: getNodeUrl('rinkeby'),
+      accounts: getAccount('rinkeby'),
+    },
+    kovan: {
+      url: getNodeUrl('kovan'),
+      accounts: getAccount('kovan'),
+    },
+    bsctestnet: {
+      url: getNodeUrl('bsctestnet'),
+      accounts: getAccount('bsctestnet'),
+    },
+    bscmainnet: {
+      url: getNodeUrl('bscmainnet'),
+      accounts: getAccount('bscmainnet'),
+    },
+  },
+  namedAccounts: {
+    deployer: {
+      default: 0,
+    },
+    admin: {
+      default: 1,
+    },
+    distributer: {
+      default: 3,
+    },
+    user1: {
+      default: 4,
+    },
+    user2: {
+      default: 5,
+    },
+    user3: {
+      default: 6,
+    },
+    user4: {
+      default: 7,
+    },
+    user5: {
+      default: 8,
+    },
+    liquidator: {
+      default: 9,
+    },
+    treasury: {
+      default: 10,
     },
   },
   typechain: {
-    outDir: 'types',
-  },
-  etherscan: {
-    apiKey: ETHERSCAN_KEY,
+    outDir: 'typechain',
+    target: 'ethers-v5',
   },
   mocha: {
-    timeout: 0,
+    timeout: 600000,
   },
-  networks: {
-    kovan: getCommonNetworkConfig(eEthereumNetwork.kovan, 42),
-    ropsten: getCommonNetworkConfig(eEthereumNetwork.ropsten, 3),
-    main: getCommonNetworkConfig(eEthereumNetwork.main, 1),
-    hardhat: {
-      hardfork: 'istanbul',
-      blockGasLimit: DEFAULT_BLOCK_GAS_LIMIT,
-      gas: DEFAULT_BLOCK_GAS_LIMIT,
-      gasPrice: DEFAULT_GAS_PRICE,
-      chainId: BUIDLEREVM_CHAINID,
-      throwOnTransactionFailures: true,
-      throwOnCallFailures: true,
-      accounts: accounts.map(({secretKey, balance}: {secretKey: string; balance: string}) => ({
-        privateKey: secretKey,
-        balance,
-      })),
-      forking: mainnetFork,
-    },
-    buidlerevm_docker: {
-      hardfork: 'istanbul',
-      blockGasLimit: 9500000,
-      gas: 9500000,
-      gasPrice: 8000000000,
-      chainId: BUIDLEREVM_CHAINID,
-      throwOnTransactionFailures: true,
-      throwOnCallFailures: true,
-      url: 'http://localhost:8545',
-    },
-    ganache: {
-      url: 'http://ganache:8545',
-      accounts: {
-        mnemonic: 'fox sight canyon orphan hotel grow hedgehog build bless august weather swarm',
-        path: "m/44'/60'/0'/0",
-        initialIndex: 0,
-        count: 20,
-      },
-    },
-    coverage: {
-      url: 'http://localhost:8555',
-      chainId: COVERAGE_CHAINID,
-    },
+  gasReporter: {
+    enabled: false,
+    currency: 'USD',
   },
 };
 

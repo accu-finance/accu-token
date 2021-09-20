@@ -4,25 +4,21 @@ pragma solidity 0.7.5;
 import {ERC20} from '../open-zeppelin/ERC20.sol';
 import {ITransferHook} from '../interfaces/ITransferHook.sol';
 import {VersionedInitializable} from '../utils/VersionedInitializable.sol';
-import {GovernancePowerDelegationERC20} from './base/GovernancePowerDelegationERC20.sol';
+import {GovernancePowerDelegationERC20} from '../token/base/GovernancePowerDelegationERC20.sol';
 import {SafeMath} from '../open-zeppelin/SafeMath.sol';
-import "hardhat/console.sol";
 
 /**
  * @notice implementation of the AAVE token contract
  * @author Aave
  */
-contract AaveTokenV2 is GovernancePowerDelegationERC20, VersionedInitializable {
+contract MockAaveTokenV3 is GovernancePowerDelegationERC20, VersionedInitializable {
   using SafeMath for uint256;
 
   string internal constant NAME = 'Aave Token';
   string internal constant SYMBOL = 'AAVE';
   uint8 internal constant DECIMALS = 18;
 
-  uint256 public constant REVISION = 2;
-
-  /// @dev the amount being distributed for the PSI and PEI
-  uint256 internal constant DISTRIBUTION_AMOUNT = 10000000 ether;
+  uint256 public constant REVISION = 3;
 
   /// @dev owner => next valid nonce to submit with permit()
   mapping(address => uint256) public _nonces;
@@ -57,29 +53,7 @@ contract AaveTokenV2 is GovernancePowerDelegationERC20, VersionedInitializable {
   /**
    * @dev initializes the contract upon assignment to the InitializableAdminUpgradeabilityProxy
    */
-  function initialize(address distributer) external initializer {
-    uint256 chainId;
-
-    //solium-disable-next-line
-    assembly {
-      chainId := chainid()
-    }
-
-    DOMAIN_SEPARATOR = keccak256(
-      abi.encode(
-        EIP712_DOMAIN,
-        keccak256(bytes(NAME)),
-        keccak256(EIP712_REVISION),
-        chainId,
-        address(this)
-      )
-    );
-    _name = NAME;
-    _symbol = SYMBOL;
-    _setupDecimals(DECIMALS);
-
-    _mint(distributer, DISTRIBUTION_AMOUNT);
-  }
+  function initialize() external initializer {}
 
   /**
    * @dev implements the permit function as for https://github.com/ethereum/EIPs/blob/8a34d644aacf0f9f8f00815307fd7dd5da07655f/EIPS/eip-2612.md
