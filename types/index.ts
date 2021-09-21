@@ -1,10 +1,10 @@
 import {SignerWithAddress} from '@nomiclabs/hardhat-ethers/dist/src/signers';
-import {AaveTokenV2, InitializableAdminUpgradeabilityProxy} from '../typechain';
+import {AccuToken, InitializableAdminUpgradeabilityProxy} from '../typechain';
 
 export enum ContractId {
-  AaveTokenV2 = 'AaveTokenV2',
+  AccuToken = 'AccuToken',
   InitializableAdminUpgradeabilityProxy = 'InitializableAdminUpgradeabilityProxy',
-  MockAaveTokenV3 = 'MockAaveTokenV3',
+  MockAccuTokenV2 = 'MockAccuTokenV2',
   DoubleTransferHelper = 'DoubleTransferHelper',
 }
 
@@ -54,8 +54,8 @@ export enum DelegationType {
 }
 
 export type ContractRecord = {
-  aaveTokenV2: AaveTokenV2;
-  aaveTokenV2Impl: AaveTokenV2;
+  accuToken: AccuToken;
+  accuTokenImpl: AccuToken;
   aaveTokenProxy: InitializableAdminUpgradeabilityProxy;
 };
 

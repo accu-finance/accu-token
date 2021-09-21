@@ -1,17 +1,18 @@
 import {HardhatRuntimeEnvironment} from 'hardhat/types';
-import {AaveTokenV2, DoubleTransferHelper, InitializableAdminUpgradeabilityProxy, MockAaveTokenV3} from '../typechain';
+import {AccuToken, DoubleTransferHelper, InitializableAdminUpgradeabilityProxy} from '../typechain';
+import {MockAccuTokenV2} from '../typechain/MockAccuTokenV2';
 import {Address, ContractId, ContractType} from '../types';
 import {getContractAt} from './contractGetter';
 import registerContractInJsonDb from './registerContractInJsonDb';
 
-export const deployAaveTokenV2 = async (hre: HardhatRuntimeEnvironment): Promise<AaveTokenV2> => {
+export const deployAccuToken = async (hre: HardhatRuntimeEnvironment): Promise<AccuToken> => {
   const {
     deployments: {deploy},
     getNamedAccounts,
     network,
   } = hre;
   const {deployer} = await getNamedAccounts();
-  const contract = ContractId.AaveTokenV2;
+  const contract = ContractId.AccuToken;
   const result = await deploy(contract, {
     from: deployer,
     contract,
@@ -42,14 +43,14 @@ export const deployInitializableAdminUpgradeabilityProxy = async (
   return await getContractAt(hre, contract, result.address);
 };
 
-export const deployMockAaveTokenV3 = async (hre: HardhatRuntimeEnvironment): Promise<MockAaveTokenV3> => {
+export const deployMockAccuTokenV2 = async (hre: HardhatRuntimeEnvironment): Promise<MockAccuTokenV2> => {
   const {
     deployments: {deploy},
     getNamedAccounts,
     network,
   } = hre;
   const {deployer} = await getNamedAccounts();
-  const contract = ContractId.MockAaveTokenV3;
+  const contract = ContractId.MockAccuTokenV2;
   const result = await deploy(contract, {
     from: deployer,
     contract,

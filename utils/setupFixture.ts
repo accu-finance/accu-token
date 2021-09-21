@@ -1,7 +1,7 @@
 import {Contract} from 'ethers';
 import {deployments, ethers, getNamedAccounts} from 'hardhat';
 import {HardhatRuntimeEnvironment} from 'hardhat/types';
-import {AaveTokenV2, InitializableAdminUpgradeabilityProxy} from '../typechain';
+import {AccuToken, InitializableAdminUpgradeabilityProxy} from '../typechain';
 import {ContractId, ContractRecord, Fixture, User} from '../types';
 import {enumKeys} from '../utils';
 import {getContractAt} from './contractGetter';
@@ -31,12 +31,12 @@ export const setupFixture = deployments.createFixture(async (hre: HardhatRuntime
   const aaveTokenProxy = (await hre.ethers.getContract(
     ContractId.InitializableAdminUpgradeabilityProxy
   )) as InitializableAdminUpgradeabilityProxy;
-  const aaveTokenV2Impl = (await hre.ethers.getContract(ContractId.AaveTokenV2)) as AaveTokenV2;
-  const aaveTokenV2 = await getContractAt<AaveTokenV2>(hre, ContractId.AaveTokenV2, aaveTokenProxy.address);
+  const accuTokenImpl = (await hre.ethers.getContract(ContractId.AccuToken)) as AccuToken;
+  const accuToken = await getContractAt<AccuToken>(hre, ContractId.AccuToken, aaveTokenProxy.address);
 
   const contract: ContractRecord = {
-    aaveTokenV2,
-    aaveTokenV2Impl,
+    accuToken,
+    accuTokenImpl,
     aaveTokenProxy,
   };
 

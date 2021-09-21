@@ -8,14 +8,14 @@ import {GovernancePowerDelegationERC20} from '../token/base/GovernancePowerDeleg
 import {SafeMath} from '../open-zeppelin/SafeMath.sol';
 
 /**
- * @notice implementation of the AAVE token contract
+ * @notice implementation of the ACCU token contract
  * @author Aave
  */
-contract MockAaveTokenV3 is GovernancePowerDelegationERC20, VersionedInitializable {
+contract MockAccuTokenV2 is GovernancePowerDelegationERC20, VersionedInitializable {
   using SafeMath for uint256;
 
-  string internal constant NAME = 'Aave Token';
-  string internal constant SYMBOL = 'AAVE';
+  string internal constant NAME = 'Accu Token';
+  string internal constant SYMBOL = 'ACCU';
   uint8 internal constant DECIMALS = 18;
 
   uint256 public constant REVISION = 3;

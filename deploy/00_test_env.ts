@@ -1,7 +1,7 @@
 import {DeployFunction} from 'hardhat-deploy/types';
 import {HardhatRuntimeEnvironment} from 'hardhat/types';
 import {parseNetwork} from '../utils';
-import {deployAaveTokenV2, deployInitializableAdminUpgradeabilityProxy} from '../utils/contractDeployer';
+import {deployAccuToken, deployInitializableAdminUpgradeabilityProxy} from '../utils/contractDeployer';
 import {waitForTx} from '../utils/hhNetwork';
 
 const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
@@ -11,7 +11,7 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
   const {getNamedAccounts} = hre;
   const {admin, distributer} = await getNamedAccounts();
 
-  const aaveTokenImpl = await deployAaveTokenV2(hre);
+  const aaveTokenImpl = await deployAccuToken(hre);
   const aaveTokenProxy = await deployInitializableAdminUpgradeabilityProxy(hre);
   const encodedIntialize = aaveTokenImpl.interface.encodeFunctionData('initialize', [distributer]);
 
