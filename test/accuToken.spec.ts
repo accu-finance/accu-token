@@ -265,19 +265,19 @@ describe('ACCU Token', () => {
   });
 
   it('Updates the implementation of the Accu token to V2', async () => {
-    const {aaveTokenProxy, admin} = fixture;
+    const {accuTokenProxy: accuTokenProxy, admin} = fixture;
 
     const mockTokenV3 = await deployMockAccuTokenV2(hre);
 
     const encodedIntialize = mockTokenV3.interface.encodeFunctionData('initialize');
 
-    await admin.aaveTokenProxy.upgradeToAndCall(mockTokenV3.address, encodedIntialize);
+    await admin.accuTokenProxy.upgradeToAndCall(mockTokenV3.address, encodedIntialize);
 
-    const aaveTokenV3 = await getContractAt<MockAccuTokenV2>(hre, ContractId.MockAccuTokenV2, aaveTokenProxy.address);
+    const accuTokenV2 = await getContractAt<MockAccuTokenV2>(hre, ContractId.MockAccuTokenV2, accuTokenProxy.address);
 
-    expect((await aaveTokenV3.REVISION()).toString()).to.be.equal('3', 'Invalid revision');
-    expect(await aaveTokenV3.name()).to.be.equal('Accu Token', 'Invalid token name');
-    expect(await aaveTokenV3.symbol()).to.be.equal('ACCU', 'Invalid token symbol');
-    expect((await aaveTokenV3.decimals()).toString()).to.be.equal('18', 'Invalid token decimals');
+    expect((await accuTokenV2.REVISION()).toString()).to.be.equal('3', 'Invalid revision');
+    expect(await accuTokenV2.name()).to.be.equal('Accu Token', 'Invalid token name');
+    expect(await accuTokenV2.symbol()).to.be.equal('ACCU', 'Invalid token symbol');
+    expect((await accuTokenV2.decimals()).toString()).to.be.equal('18', 'Invalid token decimals');
   });
 });

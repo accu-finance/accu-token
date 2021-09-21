@@ -28,16 +28,16 @@ export const setupFixture = deployments.createFixture(async (hre: HardhatRuntime
 
   await deployments.fixture(['testEnv']);
 
-  const aaveTokenProxy = (await hre.ethers.getContract(
+  const accuTokenProxy = (await hre.ethers.getContract(
     ContractId.InitializableAdminUpgradeabilityProxy
   )) as InitializableAdminUpgradeabilityProxy;
   const accuTokenImpl = (await hre.ethers.getContract(ContractId.AccuToken)) as AccuToken;
-  const accuToken = await getContractAt<AccuToken>(hre, ContractId.AccuToken, aaveTokenProxy.address);
+  const accuToken = await getContractAt<AccuToken>(hre, ContractId.AccuToken, accuTokenProxy.address);
 
   const contract: ContractRecord = {
     accuToken,
     accuTokenImpl,
-    aaveTokenProxy,
+    accuTokenProxy,
   };
 
   const {deployer, admin, distributer, user1, user2, user3, user4, user5} = await getNamedAccounts();

@@ -11,12 +11,12 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
   const {getNamedAccounts} = hre;
   const {admin, distributer} = await getNamedAccounts();
 
-  const aaveTokenImpl = await deployAccuToken(hre);
-  const aaveTokenProxy = await deployInitializableAdminUpgradeabilityProxy(hre);
-  const encodedIntialize = aaveTokenImpl.interface.encodeFunctionData('initialize', [distributer]);
+  const accuTokenImpl = await deployAccuToken(hre);
+  const accuTokenProxy = await deployInitializableAdminUpgradeabilityProxy(hre);
+  const encodedIntialize = accuTokenImpl.interface.encodeFunctionData('initialize', [distributer]);
 
   await waitForTx(
-    await aaveTokenProxy['initialize(address,address,bytes)'](aaveTokenImpl.address, admin, encodedIntialize)
+    await accuTokenProxy['initialize(address,address,bytes)'](accuTokenImpl.address, admin, encodedIntialize)
   );
 };
 

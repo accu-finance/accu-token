@@ -56,7 +56,7 @@ export enum DelegationType {
 export type ContractRecord = {
   accuToken: AccuToken;
   accuTokenImpl: AccuToken;
-  aaveTokenProxy: InitializableAdminUpgradeabilityProxy;
+  accuTokenProxy: InitializableAdminUpgradeabilityProxy;
 };
 
 export type User = {
