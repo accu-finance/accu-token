@@ -45,23 +45,30 @@ describe('Delegation', () => {
     };
   });
 
-  // // Blocked by https://github.com/nomiclabs/hardhat/issues/1081
-  // xit('AddressZero tries to delegate voting power to user1 but delegatee should still be AddressZero', async () => {
-  //   const {aaveTokenV2, chainId} = fixture;
+  // Blocked by https://github.com/nomiclabs/hardhat/issues/1081
+  xit('AddressZero tries to delegate voting power to user1 but delegatee should still be AddressZero', async () => {
+    const {aaveTokenV2, user1} = fixture;
 
-  //   await DRE.network.provider.request({
-  //     method: 'hardhat_impersonateAccount',
-  //     params: ['0x0000000000000000000000000000000000000000'],
-  //   });
-  //   const zeroUser = await DRE.ethers.provider.getSigner('0x0000000000000000000000000000000000000000');
-  //   await user1.signer.sendTransaction({to: AddressZero, value:utils.parseEther('1')});
+    await hre.network.provider.request({
+      method: 'hardhat_impersonateAccount',
+      params: [AddressZero],
+    });
+    const zeroUser = await ethers.provider.getSigner(AddressZero);
+    await user1.signer.sendTransaction({to: AddressZero, value: utils.parseEther('1')});
 
-  //   await aaveTokenV2.connect(zeroUser).delegateByType(user1.address, DelegationType.VOTING_POWER);
+    console.log(await (await zeroUser.getBalance()).toWadUnit());
+    console.log('user1 address', user1.address);
 
-  //   const delegatee = await aaveTokenV2.getDelegateeByType(AddressZero, DelegationType.VOTING_POWER);
+    await aaveTokenV2.connect(zeroUser).delegateByType(user1.address, DelegationType.VOTING_POWER);
 
-  //   expect(delegatee.toString()).to.be.equal(AddressZero);
-  // });
+    // await expect(Promise.resolve(tx))
+    //   .to.emit(aaveTokenV2, 'DelegatedPowerChanged')
+    //   .withArgs(AddressZero, user1.address, DelegationType.VOTING_POWER);
+
+    const delegatee = await aaveTokenV2.getDelegateeByType(AddressZero, DelegationType.VOTING_POWER);
+
+    expect(delegatee).to.be.equal(AddressZero);
+  });
 
   it('user1 tries to delegate voting power to user2', async () => {
     const {aaveTokenV2, user1, user2} = fixture;
