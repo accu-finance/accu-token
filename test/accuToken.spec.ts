@@ -1,5 +1,6 @@
 import {waffleChai} from '@ethereum-waffle/chai';
 import {TypedDataDomain} from '@ethersproject/abstract-signer';
+import {_TypedDataEncoder} from '@ethersproject/hash';
 import {expect, use} from 'chai';
 import hre, {ethers} from 'hardhat';
 import {MockAccuTokenV2} from '../typechain';
@@ -60,6 +61,9 @@ describe('ACCU Token', () => {
     );
 
     expect(await accuToken.DOMAIN_SEPARATOR()).to.be.equal(DOMAIN_SEPARATOR_ENCODED, 'Invalid domain separator');
+
+    const domainSeparator = _TypedDataEncoder.hashDomain(domain);
+    expect(await accuToken.DOMAIN_SEPARATOR()).to.be.equal(domainSeparator, 'Invalid domain separator');
   });
 
   it('Checks the revision', async () => {
@@ -72,13 +76,9 @@ describe('ACCU Token', () => {
     const {accuToken, deployer, user1} = fixture;
     const owner = deployer.address;
     const spender = user1.address;
-
     const deadline = Zero;
     const nonce = await accuToken._nonces(owner);
     const permitAmount = utils.parseEther('2');
-
-    expect(await accuToken.allowance(owner, spender)).to.be.equal(Zero, 'INVALID_ALLOWANCE_BEFORE_PERMIT');
-
     const value = {
       owner,
       spender,
@@ -89,6 +89,7 @@ describe('ACCU Token', () => {
     const sig = await deployer.signer._signTypedData(domain, permitTypes, value);
     const {r, s, v} = utils.splitSignature(sig);
 
+    expect(await accuToken.allowance(owner, spender)).to.be.equal(Zero, 'INVALID_ALLOWANCE_BEFORE_PERMIT');
     await expect(user1.accuToken.permit(owner, spender, permitAmount, deadline, v, r, s)).to.be.revertedWith(
       'INVALID_EXPIRATION'
     );
@@ -99,13 +100,9 @@ describe('ACCU Token', () => {
     const {accuToken, deployer, user1} = fixture;
     const owner = deployer.address;
     const spender = user1.address;
-
     const expiration = MaxUint256;
     const nonce = await accuToken._nonces(owner);
     const permitAmount = utils.parseEther('2').toString();
-
-    expect(await accuToken.allowance(owner, spender)).to.be.equal(Zero, 'INVALID_ALLOWANCE_BEFORE_PERMIT');
-
     const value = {
       owner,
       spender,
@@ -116,6 +113,7 @@ describe('ACCU Token', () => {
     const sig = await deployer.signer._signTypedData(domain, permitTypes, value);
     const {r, s, v} = utils.splitSignature(sig);
 
+    expect(await accuToken.allowance(owner, spender)).to.be.equal(Zero, 'INVALID_ALLOWANCE_BEFORE_PERMIT');
     await expect(user1.accuToken.permit(owner, spender, permitAmount, expiration, v, r, s)).not.to.be.reverted;
     expect(await accuToken.allowance(owner, spender)).to.be.equal(permitAmount, 'INVALID_ALLOWANCE_AFTER_PERMIT');
     expect(await accuToken._nonces(owner)).to.be.equal(BigNumber.from(1));
@@ -125,14 +123,10 @@ describe('ACCU Token', () => {
     const {accuToken, deployer, user1} = fixture;
     const owner = deployer.address;
     const spender = user1.address;
-
     const expiration = MaxUint256;
     const nonce = await accuToken._nonces(owner);
     const permitAmount = Zero;
-    const prevPermitAmount = utils.parseEther('2').toString();
-
-    expect(await accuToken.allowance(owner, spender)).to.be.equal(prevPermitAmount, 'INVALID_ALLOWANCE_BEFORE_PERMIT');
-
+    const prevPermitAmount = utils.parseEther('2');
     const value = {
       owner,
       spender,
@@ -143,6 +137,7 @@ describe('ACCU Token', () => {
     const sig = await deployer.signer._signTypedData(domain, permitTypes, value);
     const {r, s, v} = utils.splitSignature(sig);
 
+    expect(await accuToken.allowance(owner, spender)).to.be.equal(prevPermitAmount, 'INVALID_ALLOWANCE_BEFORE_PERMIT');
     await expect(user1.accuToken.permit(owner, spender, permitAmount, expiration, v, r, s)).not.to.be.reverted;
     expect(await accuToken.allowance(owner, spender)).to.be.equal(permitAmount, 'INVALID_ALLOWANCE_AFTER_PERMIT');
     expect(await accuToken._nonces(owner)).to.be.equal(BigNumber.from(2));
@@ -152,13 +147,9 @@ describe('ACCU Token', () => {
     const {accuToken, deployer, user1} = fixture;
     const owner = deployer.address;
     const spender = user1.address;
-
     const deadline = MaxUint256;
     const nonce = BigNumber.from(1000);
     const permitAmount = utils.parseEther('2');
-
-    expect(await accuToken.allowance(owner, spender)).to.be.equal(Zero, 'INVALID_ALLOWANCE_BEFORE_PERMIT');
-
     const value = {
       owner,
       spender,
@@ -169,6 +160,7 @@ describe('ACCU Token', () => {
     const sig = await deployer.signer._signTypedData(domain, permitTypes, value);
     const {r, s, v} = utils.splitSignature(sig);
 
+    expect(await accuToken.allowance(owner, spender)).to.be.equal(Zero, 'INVALID_ALLOWANCE_BEFORE_PERMIT');
     await expect(user1.accuToken.permit(owner, spender, permitAmount, deadline, v, r, s)).to.be.revertedWith(
       'INVALID_SIGNATURE'
     );
@@ -178,13 +170,9 @@ describe('ACCU Token', () => {
     const {accuToken, deployer, user1} = fixture;
     const owner = deployer.address;
     const spender = user1.address;
-
     const deadline = BigNumber.from(1);
     const nonce = await accuToken._nonces(owner);
     const permitAmount = utils.parseEther('2');
-
-    expect(await accuToken.allowance(owner, spender)).to.be.equal(Zero, 'INVALID_ALLOWANCE_BEFORE_PERMIT');
-
     const value = {
       owner,
       spender,
@@ -195,6 +183,7 @@ describe('ACCU Token', () => {
     const sig = await deployer.signer._signTypedData(domain, permitTypes, value);
     const {r, s, v} = utils.splitSignature(sig);
 
+    expect(await accuToken.allowance(owner, spender)).to.be.equal(Zero, 'INVALID_ALLOWANCE_BEFORE_PERMIT');
     await expect(user1.accuToken.permit(owner, spender, permitAmount, deadline, v, r, s)).to.be.revertedWith(
       'INVALID_EXPIRATION'
     );
@@ -204,13 +193,9 @@ describe('ACCU Token', () => {
     const {accuToken, deployer, user1, user2} = fixture;
     const owner = deployer.address;
     const spender = user1.address;
-
     const deadline = MaxUint256;
     const nonce = await accuToken._nonces(owner);
     const permitAmount = utils.parseEther('2');
-
-    expect(await accuToken.allowance(owner, spender)).to.be.equal(Zero, 'INVALID_ALLOWANCE_BEFORE_PERMIT');
-
     const value = {
       owner,
       spender,
@@ -221,6 +206,7 @@ describe('ACCU Token', () => {
     const sig = await deployer.signer._signTypedData(domain, permitTypes, value);
     const {r, s, v} = utils.splitSignature(sig);
 
+    expect(await accuToken.allowance(owner, spender)).to.be.equal(Zero, 'INVALID_ALLOWANCE_BEFORE_PERMIT');
     await expect(user1.accuToken.permit(owner, AddressZero, permitAmount, deadline, v, r, s)).to.be.revertedWith(
       'INVALID_SIGNATURE'
     );
@@ -236,13 +222,9 @@ describe('ACCU Token', () => {
     const {accuToken, deployer, user1} = fixture;
     const owner = deployer.address;
     const spender = user1.address;
-
     const deadline = MaxUint256;
     const nonce = await accuToken._nonces(owner);
     const permitAmount = utils.parseEther('2');
-
-    expect(await accuToken.allowance(owner, spender)).to.be.equal(Zero, 'INVALID_ALLOWANCE_BEFORE_PERMIT');
-
     const value = {
       owner,
       spender,
@@ -253,6 +235,7 @@ describe('ACCU Token', () => {
     const sig = await deployer.signer._signTypedData(domain, permitTypes, value);
     const {r, s, v} = utils.splitSignature(sig);
 
+    expect(await accuToken.allowance(owner, spender)).to.be.equal(Zero, 'INVALID_ALLOWANCE_BEFORE_PERMIT');
     await expect(user1.accuToken.permit(AddressZero, spender, permitAmount, deadline, v, r, s)).to.be.revertedWith(
       'INVALID_OWNER'
     );

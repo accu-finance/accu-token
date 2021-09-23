@@ -1,5 +1,5 @@
 import {Contract} from 'ethers';
-import {deployments, ethers, getNamedAccounts} from 'hardhat';
+import {deployments, getNamedAccounts} from 'hardhat';
 import {HardhatRuntimeEnvironment} from 'hardhat/types';
 import {AccuToken, InitializableAdminUpgradeabilityProxy} from '../typechain';
 import {ContractId, ContractRecord, Fixture, User} from '../types';
@@ -8,11 +8,12 @@ import {getContractAt} from './contractGetter';
 import getConfig from './getConfig';
 
 async function setupUser<T extends {[contractName: string]: Contract}>(
+  hre: HardhatRuntimeEnvironment,
   address: string,
   contract: T,
   name?: string
 ): Promise<User & T> {
-  const signer = await ethers.getSigner(address);
+  const signer = await hre.ethers.getSigner(address);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const user: any = {address, name: name ? name : address, signer} as User & T;
@@ -49,14 +50,14 @@ export const setupFixture = deployments.createFixture(async (hre: HardhatRuntime
 
   return {
     ...contract,
-    deployer: await setupUser(deployer, contract, 'deployer'),
-    admin: await setupUser(admin, contract, 'admin'),
-    distributer: await setupUser(distributer, contract, 'distributer'),
-    user1: await setupUser(user1, contract, 'user1'),
-    user2: await setupUser(user2, contract, 'user2'),
-    user3: await setupUser(user3, contract, 'user3'),
-    user4: await setupUser(user4, contract, 'user4'),
-    user5: await setupUser(user5, contract, 'user5'),
+    deployer: await setupUser(hre, deployer, contract, 'deployer'),
+    admin: await setupUser(hre, admin, contract, 'admin'),
+    distributer: await setupUser(hre, distributer, contract, 'distributer'),
+    user1: await setupUser(hre, user1, contract, 'user1'),
+    user2: await setupUser(hre, user2, contract, 'user2'),
+    user3: await setupUser(hre, user3, contract, 'user3'),
+    user4: await setupUser(hre, user4, contract, 'user4'),
+    user5: await setupUser(hre, user5, contract, 'user5'),
     config: config,
     chainId,
   } as Fixture;
