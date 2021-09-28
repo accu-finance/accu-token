@@ -1,6 +1,5 @@
 import {HardhatRuntimeEnvironment} from 'hardhat/types';
-import {AccuToken, DoubleTransferHelper, InitializableAdminUpgradeabilityProxy} from '../typechain';
-import {MockAccuTokenV2} from '../typechain/MockAccuTokenV2';
+import {AccuToken, DoubleTransferHelper, InitializableAdminUpgradeabilityProxy, MockAccuTokenV2} from '../typechain';
 import {Address, ContractId, ContractType} from '../types';
 import {getContractAt} from './contractGetter';
 import registerContractInJsonDb from './registerContractInJsonDb';

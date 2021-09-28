@@ -9,7 +9,7 @@ import {SafeMath} from '../open-zeppelin/SafeMath.sol';
 
 /**
  * @notice implementation of the ACCU token contract
- * @author Accu 
+ * @author Accu
  */
 contract MockAccuTokenV2 is GovernancePowerDelegationERC20, VersionedInitializable {
   using SafeMath for uint256;
@@ -18,7 +18,10 @@ contract MockAccuTokenV2 is GovernancePowerDelegationERC20, VersionedInitializab
   string internal constant SYMBOL = 'ACCU';
   uint8 internal constant DECIMALS = 18;
 
-  uint256 public constant REVISION = 3;
+  uint256 public constant REVISION = 2;
+
+  /// @dev the amount being distributed for the PSI and PEI
+  uint256 internal constant DISTRIBUTION_AMOUNT = 10000000 ether;
 
   /// @dev owner => next valid nonce to submit with permit()
   mapping(address => uint256) public _nonces;
@@ -50,10 +53,27 @@ contract MockAccuTokenV2 is GovernancePowerDelegationERC20, VersionedInitializab
 
   constructor() public ERC20(NAME, SYMBOL) {}
 
-  /**
+ /**
    * @dev initializes the contract upon assignment to the InitializableAdminUpgradeabilityProxy
    */
-  function initialize() external initializer {}
+  function initialize() external initializer {
+    uint256 chainId;
+
+    //solium-disable-next-line
+    assembly {
+      chainId := chainid()
+    }
+
+    DOMAIN_SEPARATOR = keccak256(
+      abi.encode(
+        EIP712_DOMAIN,
+        keccak256(bytes(NAME)),
+        keccak256(EIP712_REVISION),
+        chainId,
+        address(this)
+      )
+    );
+  }
 
   /**
    * @dev implements the permit function as for https://github.com/ethereum/EIPs/blob/8a34d644aacf0f9f8f00815307fd7dd5da07655f/EIPS/eip-2612.md

@@ -17,3 +17,5 @@ deployed-contracts.json
 !.vscode/settings.json.default
 !.vscode/launch.json.default
 !.vscode/extensions.json.default
+
+deployments/localhost/

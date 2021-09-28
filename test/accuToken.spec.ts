@@ -3,10 +3,8 @@ import {TypedDataDomain} from '@ethersproject/abstract-signer';
 import {_TypedDataEncoder} from '@ethersproject/hash';
 import {expect, use} from 'chai';
 import hre, {ethers} from 'hardhat';
-import {MockAccuTokenV2} from '../typechain';
-import {ContractId, Fixture} from '../types';
+import {Fixture} from '../types';
 import {deployMockAccuTokenV2} from '../utils/contractDeployer';
-import {getContractAt} from '../utils/contractGetter';
 import setupFixture from '../utils/setupFixture';
 
 const {Zero, MaxUint256, AddressZero} = ethers.constants;
@@ -69,7 +67,7 @@ describe('ACCU Token', () => {
   it('Checks the revision', async () => {
     const {accuToken} = fixture;
 
-    expect((await accuToken.REVISION()).toString()).to.be.equal('2', 'Invalid revision');
+    expect((await accuToken.REVISION()).toString()).to.be.equal('1', 'Invalid revision');
   });
 
   it('Reverts submitting a permit with 0 expiration', async () => {
@@ -248,19 +246,20 @@ describe('ACCU Token', () => {
   });
 
   it('Updates the implementation of the Accu token to V2', async () => {
-    const {accuTokenProxy: accuTokenProxy, admin} = fixture;
+    const {admin, accuToken} = fixture;
 
-    const mockTokenV3 = await deployMockAccuTokenV2(hre);
+    const totalSupply = await accuToken.totalSupply();
 
-    const encodedIntialize = mockTokenV3.interface.encodeFunctionData('initialize');
+    const mockTokenV2 = await deployMockAccuTokenV2(hre);
 
-    await admin.accuTokenProxy.upgradeToAndCall(mockTokenV3.address, encodedIntialize);
+    const encodedIntialize = mockTokenV2.interface.encodeFunctionData('initialize');
 
-    const accuTokenV2 = await getContractAt<MockAccuTokenV2>(hre, ContractId.MockAccuTokenV2, accuTokenProxy.address);
+    await admin.accuTokenProxy.upgradeToAndCall(mockTokenV2.address, encodedIntialize);
 
-    expect((await accuTokenV2.REVISION()).toString()).to.be.equal('3', 'Invalid revision');
-    expect(await accuTokenV2.name()).to.be.equal('Accu Token', 'Invalid token name');
-    expect(await accuTokenV2.symbol()).to.be.equal('ACCU', 'Invalid token symbol');
-    expect((await accuTokenV2.decimals()).toString()).to.be.equal('18', 'Invalid token decimals');
+    expect((await accuToken.REVISION()).toString()).to.be.equal('2', 'Invalid revision');
+    expect(await accuToken.name()).to.be.equal('Accu Token', 'Invalid token name');
+    expect(await accuToken.symbol()).to.be.equal('ACCU', 'Invalid token symbol');
+    expect((await accuToken.decimals()).toString()).to.be.equal('18', 'Invalid token decimals');
+    expect(await accuToken.totalSupply()).to.be.equal(totalSupply, 'New version should not mint new token');
   });
 });

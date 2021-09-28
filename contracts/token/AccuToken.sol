@@ -6,7 +6,6 @@ import {ITransferHook} from '../interfaces/ITransferHook.sol';
 import {VersionedInitializable} from '../utils/VersionedInitializable.sol';
 import {GovernancePowerDelegationERC20} from './base/GovernancePowerDelegationERC20.sol';
 import {SafeMath} from '../open-zeppelin/SafeMath.sol';
-import "hardhat/console.sol";
 
 /**
  * @notice implementation of the ACCU token contract
@@ -19,7 +18,7 @@ contract AccuToken is GovernancePowerDelegationERC20, VersionedInitializable {
   string internal constant SYMBOL = 'ACCU';
   uint8 internal constant DECIMALS = 18;
 
-  uint256 public constant REVISION = 2;
+  uint256 public constant REVISION = 1;
 
   /// @dev the amount being distributed for the PSI and PEI
   uint256 internal constant DISTRIBUTION_AMOUNT = 10000000 ether;
@@ -74,11 +73,14 @@ contract AccuToken is GovernancePowerDelegationERC20, VersionedInitializable {
         address(this)
       )
     );
-    _name = NAME;
-    _symbol = SYMBOL;
-    _setupDecimals(DECIMALS);
 
-    _mint(distributer, DISTRIBUTION_AMOUNT);
+    if (REVISION == 1) {
+      _name = NAME;
+      _symbol = SYMBOL;
+      _setupDecimals(DECIMALS);
+
+      _mint(distributer, DISTRIBUTION_AMOUNT);
+    }
   }
 
   /**
