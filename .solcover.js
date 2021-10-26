@@ -1,5 +1,5 @@
 module.exports = {
-  skipFiles: ['open-zeppelin/'],
+  skipFiles: ['open-zeppelin/', 'mocks/'],
   mocha: {
     enableTimeouts: false,
   },

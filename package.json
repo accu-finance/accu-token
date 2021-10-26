@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Accu ERC20 token",
   "files": [
-    "/contracts/**/*.sol"
+    "contracts"
   ],
   "scripts": {
     "prepare": "node ./.setup.js && npm run compile",
@@ -44,17 +44,24 @@
     "hardhat-deploy-ethers": "^0.3.0-beta.10",
     "hardhat-gas-reporter": "^1.0.4",
     "hardhat-typechain": "^0.3.5",
+    "husky": "^7.0.4",
     "lowdb": "1.0.0",
     "prettier": "^2.3.2",
     "prettier-plugin-solidity": "^1.0.0-beta.17",
+    "pretty-quick": "^3.1.1",
     "solhint": "^3.3.2",
     "solhint-plugin-prettier": "0.0.5",
-    "solidity-coverage": "^0.7.15",
+    "solidity-coverage": "^0.7.17",
     "ts-generator": "^0.1.1",
     "ts-node": "^9.1.1",
     "tslint-config-prettier": "^1.18.0",
     "typechain": "^4.0.2",
     "typescript": "^4.2.2"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "pretty-quick --staged --pattern 'contracts/**/*.sol' --pattern '**/*.{ts,js}'"
+    }
   },
   "author": "Aave",
   "contributors": [
@@ -80,9 +87,7 @@
     }
   ],
   "license": "AGPLv3",
-  "dependencies": {
-    "tmp-promise": "^3.0.2"
-  },
+  "dependencies": {},
   "publishConfig": {
     "@aave-tech:registry": "https://gitlab.com/api/v4/projects/19392283/packages/npm/"
   }
