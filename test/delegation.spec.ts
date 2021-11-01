@@ -1,1012 +1,724 @@
-import chai, {expect} from 'chai';
-import {fail} from 'assert';
-import {solidity} from 'ethereum-waffle';
-import {TestEnv, makeSuite} from './helpers/make-suite';
-import {ProtocolErrors, eContractid} from '../helpers/types';
-import {DRE, advanceBlock, timeLatest, waitForTx} from '../helpers/misc-utils';
-import {
-  buildDelegateParams,
-  buildDelegateByTypeParams,
-  deployAaveTokenV2,
-  deployDoubleTransferHelper,
-  getContract,
-  getCurrentBlock,
-  getSignatureFromTypedData,
-} from '../helpers/contracts-helpers';
-import {AaveTokenV2} from '../types/AaveTokenV2';
-import {MAX_UINT_AMOUNT, ZERO_ADDRESS} from '../helpers/constants';
-import {parseEther} from 'ethers/lib/utils';
+import {waffleChai} from '@ethereum-waffle/chai';
+import {TypedDataDomain} from '@ethersproject/abstract-signer';
+import {expect, use} from 'chai';
+import hre, {ethers} from 'hardhat';
+import {DelegationType, Fixture} from '../types';
+import {deployMockDoubleTransfer} from '../utils/contractDeployer';
+import {advanceTimeAndBlock, waitForTx} from '../utils/hhNetwork';
+import setupFixture from '../utils/setupFixture';
 
-chai.use(solidity);
+const {Zero, MaxUint256, AddressZero} = ethers.constants;
+const {utils} = ethers;
 
-makeSuite('Delegation', (testEnv: TestEnv) => {
-  const {} = ProtocolErrors;
-  let aaveInstance = {} as AaveTokenV2;
+use(waffleChai);
+
+describe('Delegation', () => {
   let firstActionBlockNumber = 0;
   let secondActionBlockNumber = 0;
 
-  it('Updates the implementation of the AAVE token to V2', async () => {
-    const {aaveToken, users} = testEnv;
+  const fixture = {} as Fixture;
+  let domain: TypedDataDomain;
+  const delegateTypes = {
+    Delegate: [
+      {name: 'delegatee', type: 'address'},
+      {name: 'nonce', type: 'uint256'},
+      {name: 'expiry', type: 'uint256'},
+    ],
+  };
+  const delegateByTypeTypes = {
+    DelegateByType: [
+      {name: 'delegatee', type: 'address'},
+      {name: 'type', type: 'uint256'},
+      {name: 'nonce', type: 'uint256'},
+      {name: 'expiry', type: 'uint256'},
+    ],
+  };
 
-    //getting the proxy contract from the aave token address
-    const aaveTokenProxy = await getContract(
-      eContractid.InitializableAdminUpgradeabilityProxy,
-      aaveToken.address
-    );
-
-    const AAVEv2 = await deployAaveTokenV2();
-
-    const encodedIntialize = AAVEv2.interface.encodeFunctionData('initialize');
-
-    await aaveTokenProxy
-      .connect(users[0].signer)
-      .upgradeToAndCall(AAVEv2.address, encodedIntialize);
-
-    aaveInstance = await getContract(eContractid.AaveTokenV2, aaveTokenProxy.address);
+  before(async () => {
+    Object.assign(fixture, await setupFixture());
+    const {chainId, accuToken} = fixture;
+    domain = {
+      name: 'Accu Token',
+      version: '1',
+      chainId: chainId,
+      verifyingContract: accuToken.address,
+    };
   });
 
   // Blocked by https://github.com/nomiclabs/hardhat/issues/1081
-  xit('ZERO_ADDRESS tries to delegate voting power to user1 but delegatee should still be ZERO_ADDRESS', async () => {
-    const {
-      users: [, user1],
-    } = testEnv;
-    await DRE.network.provider.request({
+  xit('AddressZero tries to delegate voting power to user1 but delegatee should still be AddressZero', async () => {
+    const {accuToken, user1} = fixture;
+
+    await hre.network.provider.request({
       method: 'hardhat_impersonateAccount',
-      params: ['0x0000000000000000000000000000000000000000'],
+      params: [AddressZero],
     });
-    const zeroUser = await DRE.ethers.provider.getSigner(
-      '0x0000000000000000000000000000000000000000'
-    );
-    await user1.signer.sendTransaction({to: ZERO_ADDRESS, value: parseEther('1')});
+    const zeroUser = await ethers.provider.getSigner(AddressZero);
+    await user1.signer.sendTransaction({to: AddressZero, value: utils.parseEther('1')});
 
-    await aaveInstance.connect(zeroUser).delegateByType(user1.address, '0');
+    console.log(await (await zeroUser.getBalance()).toWadUnit());
+    console.log('user1 address', user1.address);
 
-    const delegatee = await aaveInstance.getDelegateeByType(ZERO_ADDRESS, '0');
+    await accuToken.connect(zeroUser).delegateByType(user1.address, DelegationType.VOTING_POWER);
 
-    expect(delegatee.toString()).to.be.equal(ZERO_ADDRESS);
+    // await expect(Promise.resolve(tx))
+    //   .to.emit(accuToken, 'DelegatedPowerChanged')
+    //   .withArgs(AddressZero, user1.address, DelegationType.VOTING_POWER);
+
+    const delegatee = await accuToken.getDelegateeByType(AddressZero, DelegationType.VOTING_POWER);
+
+    expect(delegatee).to.be.equal(AddressZero);
   });
 
-  it('User 1 tries to delegate voting power to user 2', async () => {
-    const {users} = testEnv;
+  it('user1 tries to delegate voting power to user2', async () => {
+    const {accuToken, user1, user2} = fixture;
 
-    await aaveInstance.connect(users[1].signer).delegateByType(users[2].address, '0');
+    await user1.accuToken.delegateByType(user2.address, DelegationType.VOTING_POWER);
 
-    const delegatee = await aaveInstance.getDelegateeByType(users[1].address, '0');
+    const delegatee = await accuToken.getDelegateeByType(user1.address, DelegationType.VOTING_POWER);
 
-    expect(delegatee.toString()).to.be.equal(users[2].address);
+    expect(delegatee).to.be.equal(user2.address);
   });
 
-  it('User 1 tries to delegate proposition power to user 3', async () => {
-    const {users} = testEnv;
+  it('user1 tries to delegate proposition power to user3', async () => {
+    const {accuToken, user1, user3} = fixture;
 
-    await aaveInstance.connect(users[1].signer).delegateByType(users[3].address, '1');
+    await user1.accuToken.delegateByType(user3.address, DelegationType.PROPOSITION_POWER);
 
-    const delegatee = await aaveInstance.getDelegateeByType(users[1].address, '1');
+    const delegatee = await accuToken.getDelegateeByType(user1.address, DelegationType.PROPOSITION_POWER);
 
-    expect(delegatee.toString()).to.be.equal(users[3].address);
+    expect(delegatee).to.be.equal(user3.address);
   });
 
-  it('Starts the migration', async () => {
-    const {lendToAaveMigrator, lendToAaveMigratorImpl} = testEnv;
+  it('Revert: User1 tries to delegate voting power to AddressZero', async () => {
+    const {user1} = fixture;
 
-    const lendToAaveMigratorInitializeEncoded = lendToAaveMigratorImpl.interface.encodeFunctionData(
-      'initialize'
+    await expect(user1.accuToken.delegateByType(AddressZero, DelegationType.VOTING_POWER)).to.be.revertedWith(
+      'INVALID_DELEGATEE'
     );
-
-    const migratorAsProxy = await getContract(
-      eContractid.InitializableAdminUpgradeabilityProxy,
-      lendToAaveMigrator.address
-    );
-
-    await migratorAsProxy
-      .connect(testEnv.users[0].signer)
-      .upgradeToAndCall(lendToAaveMigratorImpl.address, lendToAaveMigratorInitializeEncoded);
-  });
-
-  it('User1 tries to delegate voting power to ZERO_ADDRESS', async () => {
-    const {
-      users: [, , , , , user],
-      lendToken,
-      lendToAaveMigrator,
-    } = testEnv;
-    const lendBalance = parseEther('1000');
-    const aaveBalance = parseEther('1');
-
-    // Mint LEND and migrate
-    await lendToken.connect(user.signer).mint(lendBalance);
-    await lendToken.connect(user.signer).approve(lendToAaveMigrator.address, lendBalance);
-    await lendToAaveMigrator.connect(user.signer).migrateFromLEND(lendBalance);
-
-    // Track current power
-    const priorPowerUser = await aaveInstance.getPowerCurrent(user.address, '0');
-    const priorPowerUserZeroAddress = await aaveInstance.getPowerCurrent(ZERO_ADDRESS, '0');
-
-    await expect(
-      aaveInstance.connect(user.signer).delegateByType(ZERO_ADDRESS, '0')
-    ).to.be.revertedWith('INVALID_DELEGATEE');
-  });
-
-  it('User 1 migrates 1000 LEND; checks voting and proposition power of user 2 and 3', async () => {
-    const {lendToAaveMigrator, lendToken, users} = testEnv;
-    const user1 = users[1];
-    const user2 = users[2];
-    const user3 = users[3];
-
-    const lendBalance = parseEther('1000');
-    const expectedAaveBalanceAfterMigration = parseEther('1');
-
-    await lendToken.connect(user1.signer).mint(lendBalance);
-
-    await lendToken.connect(user1.signer).approve(lendToAaveMigrator.address, lendBalance);
-
-    await lendToAaveMigrator.connect(user1.signer).migrateFromLEND(lendBalance);
-
-    const lendBalanceAfterMigration = await lendToken.balanceOf(user1.address);
-    const aaveBalanceAfterMigration = await aaveInstance.balanceOf(user1.address);
-
-    firstActionBlockNumber = await getCurrentBlock();
-
-    const user1PropPower = await aaveInstance.getPowerCurrent(user1.address, '0');
-    const user1VotingPower = await aaveInstance.getPowerCurrent(user1.address, '1');
-
-    const user2VotingPower = await aaveInstance.getPowerCurrent(user2.address, '0');
-    const user2PropPower = await aaveInstance.getPowerCurrent(user2.address, '1');
-
-    const user3VotingPower = await aaveInstance.getPowerCurrent(user3.address, '0');
-    const user3PropPower = await aaveInstance.getPowerCurrent(user3.address, '1');
-
-    expect(user1PropPower.toString()).to.be.equal('0', 'Invalid prop power for user 1');
-    expect(user1VotingPower.toString()).to.be.equal('0', 'Invalid voting power for user 1');
-
-    expect(user2PropPower.toString()).to.be.equal('0', 'Invalid prop power for user 2');
-    expect(user2VotingPower.toString()).to.be.equal(
-      expectedAaveBalanceAfterMigration.toString(),
-      'Invalid voting power for user 2'
-    );
-
-    expect(user3PropPower.toString()).to.be.equal(
-      expectedAaveBalanceAfterMigration.toString(),
-      'Invalid prop power for user 3'
-    );
-    expect(user3VotingPower.toString()).to.be.equal('0', 'Invalid voting power for user 3');
-
-    expect(lendBalanceAfterMigration.toString()).to.be.equal('0');
-    expect(aaveBalanceAfterMigration.toString()).to.be.equal(expectedAaveBalanceAfterMigration);
-  });
-
-  it('User 2 migrates 1000 LEND; checks voting and proposition power of user 2', async () => {
-    const {lendToAaveMigrator, lendToken, users} = testEnv;
-    const user2 = users[2];
-
-    const lendBalance = parseEther('1000');
-    const expectedAaveBalanceAfterMigration = parseEther('1');
-
-    await lendToken.connect(user2.signer).mint(lendBalance);
-
-    await lendToken.connect(user2.signer).approve(lendToAaveMigrator.address, lendBalance);
-
-    await lendToAaveMigrator.connect(user2.signer).migrateFromLEND(lendBalance);
-
-    const user2VotingPower = await aaveInstance.getPowerCurrent(user2.address, '0');
-    const user2PropPower = await aaveInstance.getPowerCurrent(user2.address, '1');
-
-    expect(user2PropPower.toString()).to.be.equal(
-      expectedAaveBalanceAfterMigration.toString(),
-      'Invalid prop power for user 3'
-    );
-    expect(user2VotingPower.toString()).to.be.equal(
-      expectedAaveBalanceAfterMigration.mul('2').toString(),
-      'Invalid voting power for user 3'
+    await expect(user1.accuToken.delegateByType(AddressZero, DelegationType.PROPOSITION_POWER)).to.be.revertedWith(
+      'INVALID_DELEGATEE'
     );
   });
 
-  it('User 3 migrates 1000 LEND; checks voting and proposition power of user 3', async () => {
-    const {lendToAaveMigrator, lendToken, users} = testEnv;
-    const user3 = users[3];
+  it('user1 obtains 1 ACCU; checks voting and proposition power of user2 and 3', async () => {
+    const {accuToken, distributer, user1, user2, user3} = fixture;
+    const amount = utils.parseEther('1');
 
-    const lendBalance = parseEther('1000');
-    const expectedAaveBalanceAfterMigration = parseEther('1');
+    const tx = await waitForTx(await distributer.accuToken.transfer(user1.address, amount));
+    firstActionBlockNumber = tx.blockNumber;
 
-    await lendToken.connect(user3.signer).mint(lendBalance);
+    const user1PropPower = await accuToken.getPowerCurrent(user1.address, DelegationType.VOTING_POWER);
+    const user1VotingPower = await accuToken.getPowerCurrent(user1.address, DelegationType.PROPOSITION_POWER);
 
-    await lendToken.connect(user3.signer).approve(lendToAaveMigrator.address, lendBalance);
+    const user2VotingPower = await accuToken.getPowerCurrent(user2.address, DelegationType.VOTING_POWER);
+    const user2PropPower = await accuToken.getPowerCurrent(user2.address, DelegationType.PROPOSITION_POWER);
 
-    await lendToAaveMigrator.connect(user3.signer).migrateFromLEND(lendBalance);
+    const user3VotingPower = await accuToken.getPowerCurrent(user3.address, DelegationType.VOTING_POWER);
+    const user3PropPower = await accuToken.getPowerCurrent(user3.address, DelegationType.PROPOSITION_POWER);
 
-    const user3VotingPower = await aaveInstance.getPowerCurrent(user3.address, '0');
-    const user3PropPower = await aaveInstance.getPowerCurrent(user3.address, '1');
+    expect(user1PropPower).to.be.equal(Zero, 'Invalid prop power for user1');
+    expect(user1VotingPower).to.be.equal(Zero, 'Invalid voting power for user1');
 
-    expect(user3PropPower.toString()).to.be.equal(
-      expectedAaveBalanceAfterMigration.mul('2').toString(),
-      'Invalid prop power for user 3'
-    );
-    expect(user3VotingPower.toString()).to.be.equal(
-      expectedAaveBalanceAfterMigration.toString(),
-      'Invalid voting power for user 3'
-    );
+    expect(user2PropPower).to.be.equal(Zero, 'Invalid prop power for user2');
+    expect(user2VotingPower).to.be.equal(amount, 'Invalid voting power for user2');
+
+    expect(user3PropPower).to.be.equal(amount, 'Invalid prop power for user3');
+    expect(user3VotingPower).to.be.equal(Zero, 'Invalid voting power for user3');
+
+    expect(await accuToken.balanceOf(user1.address)).to.be.equal(amount);
   });
 
-  it('User 2 delegates voting and prop power to user 3', async () => {
-    const {users} = testEnv;
-    const user2 = users[2];
-    const user3 = users[3];
+  it('user2 obtains 1 ACCU; checks voting and proposition power of user2', async () => {
+    const {accuToken, distributer, user2} = fixture;
+    const amount = utils.parseEther('1');
 
-    const expectedDelegatedVotingPower = parseEther('2');
-    const expectedDelegatedPropPower = parseEther('3');
+    await waitForTx(await distributer.accuToken.transfer(user2.address, amount));
 
-    await aaveInstance.connect(user2.signer).delegate(user3.address);
+    const user2VotingPower = await accuToken.getPowerCurrent(user2.address, DelegationType.VOTING_POWER);
+    const user2PropPower = await accuToken.getPowerCurrent(user2.address, DelegationType.PROPOSITION_POWER);
 
-    const user3VotingPower = await aaveInstance.getPowerCurrent(user3.address, '0');
-    const user3PropPower = await aaveInstance.getPowerCurrent(user3.address, '1');
-
-    expect(user3VotingPower.toString()).to.be.equal(
-      expectedDelegatedVotingPower.toString(),
-      'Invalid voting power for user 3'
-    );
-    expect(user3PropPower.toString()).to.be.equal(
-      expectedDelegatedPropPower.toString(),
-      'Invalid prop power for user 3'
-    );
+    expect(user2PropPower).to.be.equal(amount, 'Invalid prop power for user2');
+    expect(user2VotingPower).to.be.equal(amount.mul('2'), 'Invalid voting power for user2');
   });
 
-  it('User 1 removes voting and prop power to user 2 and 3', async () => {
-    const {users} = testEnv;
-    const user1 = users[1];
-    const user2 = users[2];
-    const user3 = users[3];
+  it('user3 obtains 1 ACCU; checks voting and proposition power of user3', async () => {
+    const {accuToken, distributer, user3} = fixture;
+    const amount = utils.parseEther('1');
 
-    await aaveInstance.connect(user1.signer).delegate(user1.address);
+    await waitForTx(await distributer.accuToken.transfer(user3.address, amount));
 
-    const user2VotingPower = await aaveInstance.getPowerCurrent(user2.address, '0');
-    const user2PropPower = await aaveInstance.getPowerCurrent(user2.address, '1');
+    const user3VotingPower = await accuToken.getPowerCurrent(user3.address, DelegationType.VOTING_POWER);
+    const user3PropPower = await accuToken.getPowerCurrent(user3.address, DelegationType.PROPOSITION_POWER);
 
-    const user3VotingPower = await aaveInstance.getPowerCurrent(user3.address, '0');
-    const user3PropPower = await aaveInstance.getPowerCurrent(user3.address, '1');
-
-    const expectedUser2DelegatedVotingPower = '0';
-    const expectedUser2DelegatedPropPower = '0';
-
-    const expectedUser3DelegatedVotingPower = parseEther('2');
-    const expectedUser3DelegatedPropPower = parseEther('2');
-
-    expect(user2VotingPower.toString()).to.be.equal(
-      expectedUser2DelegatedVotingPower.toString(),
-      'Invalid voting power for user 3'
-    );
-    expect(user2PropPower.toString()).to.be.equal(
-      expectedUser2DelegatedPropPower.toString(),
-      'Invalid prop power for user 3'
-    );
-
-    expect(user3VotingPower.toString()).to.be.equal(
-      expectedUser3DelegatedVotingPower.toString(),
-      'Invalid voting power for user 3'
-    );
-    expect(user3PropPower.toString()).to.be.equal(
-      expectedUser3DelegatedPropPower.toString(),
-      'Invalid prop power for user 3'
-    );
+    expect(user3PropPower).to.be.equal(amount.mul('2'), 'Invalid prop power for user3');
+    expect(user3VotingPower).to.be.equal(amount, 'Invalid voting power for user3');
   });
 
-  it('Checks the delegation at the block of the first action', async () => {
-    const {users} = testEnv;
+  it('user2 delegates voting and prop power to user3', async () => {
+    const {accuToken, user2, user3} = fixture;
 
-    const user1 = users[1];
-    const user2 = users[2];
-    const user3 = users[3];
+    const expectedDelegatedVotingPower = utils.parseEther('2');
+    const expectedDelegatedPropPower = utils.parseEther('3');
 
-    const user1VotingPower = await aaveInstance.getPowerAtBlock(
+    await waitForTx(await user2.accuToken.delegate(user3.address));
+
+    const user3VotingPower = await accuToken.getPowerCurrent(user3.address, DelegationType.VOTING_POWER);
+    const user3PropPower = await accuToken.getPowerCurrent(user3.address, DelegationType.PROPOSITION_POWER);
+
+    expect(user3VotingPower).to.be.equal(expectedDelegatedVotingPower, 'Invalid voting power for user3');
+    expect(user3PropPower).to.be.equal(expectedDelegatedPropPower, 'Invalid prop power for user3');
+  });
+
+  it('user1 removes voting and prop power to user2 and 3', async () => {
+    const {accuToken, user1, user2, user3} = fixture;
+
+    await waitForTx(await user1.accuToken.delegate(user1.address));
+
+    const user2VotingPower = await accuToken.getPowerCurrent(user2.address, DelegationType.VOTING_POWER);
+    const user2PropPower = await accuToken.getPowerCurrent(user2.address, DelegationType.PROPOSITION_POWER);
+
+    const user3VotingPower = await accuToken.getPowerCurrent(user3.address, DelegationType.VOTING_POWER);
+    const user3PropPower = await accuToken.getPowerCurrent(user3.address, DelegationType.PROPOSITION_POWER);
+
+    const expectedUser2DelegatedVotingPower = Zero;
+    const expectedUser2DelegatedPropPower = Zero;
+
+    const expectedUser3DelegatedVotingPower = utils.parseEther('2');
+    const expectedUser3DelegatedPropPower = utils.parseEther('2');
+
+    expect(user2VotingPower).to.be.equal(expectedUser2DelegatedVotingPower, 'Invalid voting power for user3');
+    expect(user2PropPower).to.be.equal(expectedUser2DelegatedPropPower, 'Invalid prop power for user3');
+
+    expect(user3VotingPower).to.be.equal(expectedUser3DelegatedVotingPower, 'Invalid voting power for user3');
+    expect(user3PropPower).to.be.equal(expectedUser3DelegatedPropPower, 'Invalid prop power for user3');
+  });
+
+  it('checks the delegation at the block of the first action', async () => {
+    const {accuToken, user1, user2, user3} = fixture;
+
+    const user1VotingPower = await accuToken.getPowerAtBlock(
       user1.address,
       firstActionBlockNumber,
-      '0'
+      DelegationType.VOTING_POWER
     );
-    const user1PropPower = await aaveInstance.getPowerAtBlock(
+    const user1PropPower = await accuToken.getPowerAtBlock(
       user1.address,
       firstActionBlockNumber,
-      '1'
+      DelegationType.PROPOSITION_POWER
     );
 
-    const user2VotingPower = await aaveInstance.getPowerAtBlock(
+    const user2VotingPower = await accuToken.getPowerAtBlock(
       user2.address,
       firstActionBlockNumber,
-      '0'
+      DelegationType.VOTING_POWER
     );
-    const user2PropPower = await aaveInstance.getPowerAtBlock(
+    const user2PropPower = await accuToken.getPowerAtBlock(
       user2.address,
       firstActionBlockNumber,
-      '1'
+      DelegationType.PROPOSITION_POWER
     );
 
-    const user3VotingPower = await aaveInstance.getPowerAtBlock(
+    const user3VotingPower = await accuToken.getPowerAtBlock(
       user3.address,
       firstActionBlockNumber,
-      '0'
+      DelegationType.VOTING_POWER
     );
-    const user3PropPower = await aaveInstance.getPowerAtBlock(
+    const user3PropPower = await accuToken.getPowerAtBlock(
       user3.address,
       firstActionBlockNumber,
-      '1'
+      DelegationType.PROPOSITION_POWER
     );
 
-    const expectedUser1DelegatedVotingPower = '0';
-    const expectedUser1DelegatedPropPower = '0';
+    const expectedUser1DelegatedVotingPower = Zero;
+    const expectedUser1DelegatedPropPower = Zero;
 
-    const expectedUser2DelegatedVotingPower = parseEther('1');
-    const expectedUser2DelegatedPropPower = '0';
+    const expectedUser2DelegatedVotingPower = utils.parseEther('1');
+    const expectedUser2DelegatedPropPower = Zero;
 
-    const expectedUser3DelegatedVotingPower = '0';
-    const expectedUser3DelegatedPropPower = parseEther('1');
+    const expectedUser3DelegatedVotingPower = Zero;
+    const expectedUser3DelegatedPropPower = utils.parseEther('1');
 
-    expect(user1VotingPower.toString()).to.be.equal(
-      expectedUser1DelegatedPropPower,
-      'Invalid voting power for user 1'
-    );
-    expect(user1PropPower.toString()).to.be.equal(
-      expectedUser1DelegatedVotingPower,
-      'Invalid prop power for user 1'
-    );
+    expect(user1VotingPower).to.be.equal(expectedUser1DelegatedPropPower, 'Invalid voting power for user1');
+    expect(user1PropPower).to.be.equal(expectedUser1DelegatedVotingPower, 'Invalid prop power for user1');
 
-    expect(user2VotingPower.toString()).to.be.equal(
-      expectedUser2DelegatedVotingPower,
-      'Invalid voting power for user 2'
-    );
-    expect(user2PropPower.toString()).to.be.equal(
-      expectedUser2DelegatedPropPower,
-      'Invalid prop power for user 2'
-    );
+    expect(user2VotingPower).to.be.equal(expectedUser2DelegatedVotingPower, 'Invalid voting power for user2');
+    expect(user2PropPower).to.be.equal(expectedUser2DelegatedPropPower, 'Invalid prop power for user2');
 
-    expect(user3VotingPower.toString()).to.be.equal(
-      expectedUser3DelegatedVotingPower,
-      'Invalid voting power for user 3'
-    );
-    expect(user3PropPower.toString()).to.be.equal(
-      expectedUser3DelegatedPropPower,
-      'Invalid prop power for user 3'
-    );
+    expect(user3VotingPower).to.be.equal(expectedUser3DelegatedVotingPower, 'Invalid voting power for user3');
+    expect(user3PropPower).to.be.equal(expectedUser3DelegatedPropPower, 'Invalid prop power for user3');
   });
 
-  it('Ensure that getting the power at the current block is the same as using getPowerCurrent', async () => {
-    const {users} = testEnv;
+  it('ensure that getting the power at the current block is the same as using getPowerCurrent', async () => {
+    const {accuToken, user1} = fixture;
 
-    const user1 = users[1];
+    await advanceTimeAndBlock(1);
 
-    const currTime = await timeLatest();
+    const currentBlock = await ethers.provider.getBlockNumber();
 
-    await advanceBlock(currTime.toNumber() + 1);
-
-    const currentBlock = await getCurrentBlock();
-
-    const votingPowerAtPreviousBlock = await aaveInstance.getPowerAtBlock(
+    const votingPowerAtPreviousBlock = await accuToken.getPowerAtBlock(
       user1.address,
       currentBlock - 1,
-      '0'
+      DelegationType.VOTING_POWER
     );
-    const votingPowerCurrent = await aaveInstance.getPowerCurrent(user1.address, '0');
+    const votingPowerCurrent = await accuToken.getPowerCurrent(user1.address, DelegationType.VOTING_POWER);
 
-    const propPowerAtPreviousBlock = await aaveInstance.getPowerAtBlock(
+    const propPowerAtPreviousBlock = await accuToken.getPowerAtBlock(
       user1.address,
       currentBlock - 1,
-      '1'
+      DelegationType.PROPOSITION_POWER
     );
-    const propPowerCurrent = await aaveInstance.getPowerCurrent(user1.address, '1');
+    const propPowerCurrent = await accuToken.getPowerCurrent(user1.address, DelegationType.PROPOSITION_POWER);
 
     expect(votingPowerAtPreviousBlock.toString()).to.be.equal(
       votingPowerCurrent.toString(),
-      'Invalid voting power for user 1'
+      'Invalid voting power for user1'
     );
     expect(propPowerAtPreviousBlock.toString()).to.be.equal(
       propPowerCurrent.toString(),
-      'Invalid voting power for user 1'
+      'Invalid voting power for user1'
     );
   });
 
-  it("Checks you can't fetch power at a block in the future", async () => {
-    const {users} = testEnv;
+  it("checks you can't fetch power at a block in the future", async () => {
+    const {accuToken, user1} = fixture;
 
-    const user1 = users[1];
-
-    const currentBlock = await getCurrentBlock();
+    const currentBlock = await ethers.provider.getBlockNumber();
 
     await expect(
-      aaveInstance.getPowerAtBlock(user1.address, currentBlock + 1, '0')
+      accuToken.getPowerAtBlock(user1.address, currentBlock + 1, DelegationType.VOTING_POWER)
     ).to.be.revertedWith('INVALID_BLOCK_NUMBER');
     await expect(
-      aaveInstance.getPowerAtBlock(user1.address, currentBlock + 1, '1')
+      accuToken.getPowerAtBlock(user1.address, currentBlock + 1, DelegationType.PROPOSITION_POWER)
     ).to.be.revertedWith('INVALID_BLOCK_NUMBER');
   });
 
-  it('User 1 transfers value to himself. Ensures nothing changes in the delegated power', async () => {
-    const {users} = testEnv;
+  it('user1 transfers value to himself. Ensures nothing changes in the delegated power', async () => {
+    const {accuToken, user1} = fixture;
 
-    const user1 = users[1];
+    const user1VotingPowerBefore = await accuToken.getPowerCurrent(user1.address, DelegationType.VOTING_POWER);
+    const user1PropPowerBefore = await accuToken.getPowerCurrent(user1.address, DelegationType.PROPOSITION_POWER);
 
-    const user1VotingPowerBefore = await aaveInstance.getPowerCurrent(user1.address, '0');
-    const user1PropPowerBefore = await aaveInstance.getPowerCurrent(user1.address, '1');
+    const balance = await accuToken.balanceOf(user1.address);
 
-    const balance = await aaveInstance.balanceOf(user1.address);
+    await user1.accuToken.transfer(user1.address, balance);
 
-    await aaveInstance.connect(user1.signer).transfer(user1.address, balance);
+    const user1VotingPowerAfter = await accuToken.getPowerCurrent(user1.address, DelegationType.VOTING_POWER);
+    const user1PropPowerAfter = await accuToken.getPowerCurrent(user1.address, DelegationType.PROPOSITION_POWER);
 
-    const user1VotingPowerAfter = await aaveInstance.getPowerCurrent(user1.address, '0');
-    const user1PropPowerAfter = await aaveInstance.getPowerCurrent(user1.address, '1');
-
-    expect(user1VotingPowerBefore.toString()).to.be.equal(
-      user1VotingPowerAfter,
-      'Invalid voting power for user 1'
-    );
-    expect(user1PropPowerBefore.toString()).to.be.equal(
-      user1PropPowerAfter,
-      'Invalid prop power for user 1'
-    );
+    expect(user1VotingPowerBefore.toString()).to.be.equal(user1VotingPowerAfter, 'Invalid voting power for user1');
+    expect(user1PropPowerBefore.toString()).to.be.equal(user1PropPowerAfter, 'Invalid prop power for user1');
   });
-  it('User 1 delegates voting power to User 2 via signature', async () => {
-    const {
-      users: [, user1, user2],
-    } = testEnv;
+
+  it('user1 delegates voting power to user2 via signature', async () => {
+    const {accuToken, user1, user2} = fixture;
 
     // Calculate expected voting power
-    const user2VotPower = await aaveInstance.getPowerCurrent(user2.address, '1');
-    const expectedVotingPower = (await aaveInstance.getPowerCurrent(user1.address, '1')).add(
+    const user2VotPower = await accuToken.getPowerCurrent(user2.address, DelegationType.PROPOSITION_POWER);
+    const expectedVotingPower = (await accuToken.getPowerCurrent(user1.address, DelegationType.PROPOSITION_POWER)).add(
       user2VotPower
     );
 
     // Check prior delegatee is still user1
-    const priorDelegatee = await aaveInstance.getDelegateeByType(user1.address, '0');
-    expect(priorDelegatee.toString()).to.be.equal(user1.address);
+    const priorDelegatee = await accuToken.getDelegateeByType(user1.address, DelegationType.VOTING_POWER);
+    expect(priorDelegatee).to.be.equal(user1.address);
 
-    // Prepare params to sign message
-    const {chainId} = await DRE.ethers.provider.getNetwork();
-    if (!chainId) {
-      fail("Current network doesn't have CHAIN ID");
-    }
-    const nonce = (await aaveInstance._nonces(user1.address)).toString();
-    const expiration = MAX_UINT_AMOUNT;
-    const msgParams = buildDelegateByTypeParams(
-      chainId,
-      aaveInstance.address,
-      user2.address,
-      '0',
+    const nonce = await accuToken._nonces(user1.address);
+    const expiration = MaxUint256;
+
+    const value = {
+      delegatee: user2.address,
+      type: DelegationType.VOTING_POWER,
       nonce,
-      expiration
-    );
-    const ownerPrivateKey = require('../test-wallets.js').accounts[2].secretKey;
-    if (!ownerPrivateKey) {
-      throw new Error('INVALID_OWNER_PK');
-    }
-
-    const {v, r, s} = getSignatureFromTypedData(ownerPrivateKey, msgParams);
+      expiry: expiration,
+    };
+    const sig = await user1.signer._signTypedData(domain, delegateByTypeTypes, value);
+    const {v, r, s} = utils.splitSignature(sig);
 
     // Transmit message via delegateByTypeBySig
-    const tx = await aaveInstance
-      .connect(user1.signer)
-      .delegateByTypeBySig(user2.address, '0', nonce, expiration, v, r, s);
+    const tx = await user1.accuToken.delegateByTypeBySig(
+      user2.address,
+      DelegationType.VOTING_POWER,
+      nonce,
+      expiration,
+      v,
+      r,
+      s
+    );
 
     // Check tx success and DelegateChanged
     await expect(Promise.resolve(tx))
-      .to.emit(aaveInstance, 'DelegateChanged')
-      .withArgs(user1.address, user2.address, 0);
+      .to.emit(accuToken, 'DelegateChanged')
+      .withArgs(user1.address, user2.address, DelegationType.VOTING_POWER);
 
-    // Check DelegatedPowerChanged event: users[1] power should drop to zero
+    // Check DelegatedPowerChanged event: user1 power should drop to zero
     await expect(Promise.resolve(tx))
-      .to.emit(aaveInstance, 'DelegatedPowerChanged')
-      .withArgs(user1.address, 0, 0);
+      .to.emit(accuToken, 'DelegatedPowerChanged')
+      .withArgs(user1.address, 0, DelegationType.VOTING_POWER);
 
     // Check DelegatedPowerChanged event: users[2] power should increase to expectedVotingPower
     await expect(Promise.resolve(tx))
-      .to.emit(aaveInstance, 'DelegatedPowerChanged')
-      .withArgs(user2.address, expectedVotingPower, 0);
+      .to.emit(accuToken, 'DelegatedPowerChanged')
+      .withArgs(user2.address, expectedVotingPower, DelegationType.VOTING_POWER);
 
     // Check internal state
-    const delegatee = await aaveInstance.getDelegateeByType(user1.address, '0');
-    expect(delegatee.toString()).to.be.equal(user2.address, 'Delegatee should be user 2');
+    const delegatee = await accuToken.getDelegateeByType(user1.address, DelegationType.VOTING_POWER);
+    expect(delegatee.toString()).to.be.equal(user2.address, 'Delegatee should be user2');
 
-    const user2VotingPower = await aaveInstance.getPowerCurrent(user2.address, '0');
-    expect(user2VotingPower).to.be.equal(
-      expectedVotingPower,
-      'Delegatee should have voting power from user 1'
-    );
+    const user2VotingPower = await accuToken.getPowerCurrent(user2.address, DelegationType.VOTING_POWER);
+    expect(user2VotingPower).to.be.equal(expectedVotingPower, 'Delegatee should have voting power from user1');
   });
 
-  it('User 1 delegates proposition to User 3 via signature', async () => {
-    const {
-      users: [, user1, , user3],
-    } = testEnv;
+  it('user1 delegates proposition to user3 via signature', async () => {
+    const {accuToken, user1, user3} = fixture;
 
     // Calculate expected proposition power
-    const user3PropPower = await aaveInstance.getPowerCurrent(user3.address, '1');
-    const expectedPropPower = (await aaveInstance.getPowerCurrent(user1.address, '1')).add(
+    const user3PropPower = await accuToken.getPowerCurrent(user3.address, DelegationType.PROPOSITION_POWER);
+    const expectedPropPower = (await accuToken.getPowerCurrent(user1.address, DelegationType.PROPOSITION_POWER)).add(
       user3PropPower
     );
 
     // Check prior proposition delegatee is still user1
-    const priorDelegatee = await aaveInstance.getDelegateeByType(user1.address, '1');
-    expect(priorDelegatee.toString()).to.be.equal(
-      user1.address,
-      'expected proposition delegatee to be user1'
-    );
+    const priorDelegatee = await accuToken.getDelegateeByType(user1.address, DelegationType.PROPOSITION_POWER);
+    expect(priorDelegatee.toString()).to.be.equal(user1.address, 'expected proposition delegatee to be user1');
 
-    // Prepare parameters to sign message
-    const {chainId} = await DRE.ethers.provider.getNetwork();
-    if (!chainId) {
-      fail("Current network doesn't have CHAIN ID");
-    }
-    const nonce = (await aaveInstance._nonces(user1.address)).toString();
-    const expiration = MAX_UINT_AMOUNT;
-    const msgParams = buildDelegateByTypeParams(
-      chainId,
-      aaveInstance.address,
-      user3.address,
-      '1',
+    const nonce = await accuToken._nonces(user1.address);
+    const expiration = MaxUint256;
+
+    const value = {
+      delegatee: user3.address,
+      type: DelegationType.PROPOSITION_POWER,
       nonce,
-      expiration
-    );
-    const ownerPrivateKey = require('../test-wallets.js').accounts[2].secretKey;
-    if (!ownerPrivateKey) {
-      throw new Error('INVALID_OWNER_PK');
-    }
-    const {v, r, s} = getSignatureFromTypedData(ownerPrivateKey, msgParams);
+      expiry: expiration,
+    };
+    const sig = await user1.signer._signTypedData(domain, delegateByTypeTypes, value);
+    const {v, r, s} = utils.splitSignature(sig);
 
     // Transmit tx via delegateByTypeBySig
-    const tx = await aaveInstance
-      .connect(user1.signer)
-      .delegateByTypeBySig(user3.address, '1', nonce, expiration, v, r, s);
+    const tx = await user1.accuToken.delegateByTypeBySig(
+      user3.address,
+      DelegationType.PROPOSITION_POWER,
+      nonce,
+      expiration,
+      v,
+      r,
+      s
+    );
 
     // Check tx success and DelegateChanged
     await expect(Promise.resolve(tx))
-      .to.emit(aaveInstance, 'DelegateChanged')
-      .withArgs(user1.address, user3.address, 1);
+      .to.emit(accuToken, 'DelegateChanged')
+      .withArgs(user1.address, user3.address, DelegationType.PROPOSITION_POWER);
 
-    // Check DelegatedPowerChanged event: users[1] power should drop to zero
+    // Check DelegatedPowerChanged event: user1 power should drop to zero
     await expect(Promise.resolve(tx))
-      .to.emit(aaveInstance, 'DelegatedPowerChanged')
-      .withArgs(user1.address, 0, 1);
+      .to.emit(accuToken, 'DelegatedPowerChanged')
+      .withArgs(user1.address, 0, DelegationType.PROPOSITION_POWER);
 
     // Check DelegatedPowerChanged event: users[2] power should increase to expectedVotingPower
     await expect(Promise.resolve(tx))
-      .to.emit(aaveInstance, 'DelegatedPowerChanged')
+      .to.emit(accuToken, 'DelegatedPowerChanged')
       .withArgs(user3.address, expectedPropPower, 1);
 
     // Check internal state matches events
-    const delegatee = await aaveInstance.getDelegateeByType(user1.address, '1');
-    expect(delegatee.toString()).to.be.equal(user3.address, 'Delegatee should be user 3');
+    const delegatee = await accuToken.getDelegateeByType(user1.address, DelegationType.PROPOSITION_POWER);
+    expect(delegatee.toString()).to.be.equal(user3.address, 'Delegatee should be user3');
 
-    const user3PropositionPower = await aaveInstance.getPowerCurrent(user3.address, '1');
-    expect(user3PropositionPower).to.be.equal(
-      expectedPropPower,
-      'Delegatee should have propostion power from user 1'
-    );
+    const user3PropositionPower = await accuToken.getPowerCurrent(user3.address, DelegationType.PROPOSITION_POWER);
+    expect(user3PropositionPower).to.be.equal(expectedPropPower, 'Delegatee should have propostion power from user1');
 
     // Save current block
-    secondActionBlockNumber = await getCurrentBlock();
+    secondActionBlockNumber = await ethers.provider.getBlockNumber();
   });
 
-  it('User 2 delegates all to User 4 via signature', async () => {
-    const {
-      users: [, user1, user2, , user4],
-    } = testEnv;
+  it('user2 delegates all to User 4 via signature', async () => {
+    const {accuToken, user1, user2, user4} = fixture;
 
-    await aaveInstance.connect(user2.signer).delegate(user2.address);
+    await user2.accuToken.delegate(user2.address);
 
     // Calculate expected powers
-    const user4PropPower = await aaveInstance.getPowerCurrent(user4.address, '1');
-    const expectedPropPower = (await aaveInstance.getPowerCurrent(user2.address, '1')).add(
+    const user4PropPower = await accuToken.getPowerCurrent(user4.address, DelegationType.PROPOSITION_POWER);
+    const expectedPropPower = (await accuToken.getPowerCurrent(user2.address, DelegationType.PROPOSITION_POWER)).add(
       user4PropPower
     );
 
-    const user1VotingPower = await aaveInstance.balanceOf(user1.address);
-    const user4VotPower = await aaveInstance.getPowerCurrent(user4.address, '0');
+    const user1VotingPower = await accuToken.balanceOf(user1.address);
+    const user4VotPower = await accuToken.getPowerCurrent(user4.address, DelegationType.VOTING_POWER);
     const user2ExpectedVotPower = user1VotingPower;
-    const user4ExpectedVotPower = (await aaveInstance.getPowerCurrent(user2.address, '0'))
+    const user4ExpectedVotPower = (await accuToken.getPowerCurrent(user2.address, DelegationType.VOTING_POWER))
       .add(user4VotPower)
       .sub(user1VotingPower); // Delegation does not delegate votes others from other delegations
 
     // Check prior proposition delegatee is still user1
-    const priorPropDelegatee = await aaveInstance.getDelegateeByType(user2.address, '1');
-    expect(priorPropDelegatee.toString()).to.be.equal(
-      user2.address,
-      'expected proposition delegatee to be user1'
-    );
+    const priorPropDelegatee = await accuToken.getDelegateeByType(user2.address, DelegationType.PROPOSITION_POWER);
+    expect(priorPropDelegatee.toString()).to.be.equal(user2.address, 'expected proposition delegatee to be user1');
 
-    const priorVotDelegatee = await aaveInstance.getDelegateeByType(user2.address, '0');
-    expect(priorVotDelegatee.toString()).to.be.equal(
-      user2.address,
-      'expected proposition delegatee to be user1'
-    );
+    const priorVotDelegatee = await accuToken.getDelegateeByType(user2.address, DelegationType.VOTING_POWER);
+    expect(priorVotDelegatee.toString()).to.be.equal(user2.address, 'expected proposition delegatee to be user1');
 
-    // Prepare parameters to sign message
-    const {chainId} = await DRE.ethers.provider.getNetwork();
-    if (!chainId) {
-      fail("Current network doesn't have CHAIN ID");
-    }
-    const nonce = (await aaveInstance._nonces(user2.address)).toString();
-    const expiration = MAX_UINT_AMOUNT;
-    const msgParams = buildDelegateParams(
-      chainId,
-      aaveInstance.address,
-      user4.address,
+    const nonce = await accuToken._nonces(user2.address);
+    const expiration = MaxUint256;
+
+    const value = {
+      delegatee: user4.address,
       nonce,
-      expiration
-    );
-    const ownerPrivateKey = require('../test-wallets.js').accounts[3].secretKey;
-    if (!ownerPrivateKey) {
-      throw new Error('INVALID_OWNER_PK');
-    }
-    const {v, r, s} = getSignatureFromTypedData(ownerPrivateKey, msgParams);
+      expiry: expiration,
+    };
+    const sig = await user2.signer._signTypedData(domain, delegateTypes, value);
+    const {v, r, s} = utils.splitSignature(sig);
 
     // Transmit tx via delegateByTypeBySig
-    const tx = await aaveInstance
-      .connect(user2.signer)
-      .delegateBySig(user4.address, nonce, expiration, v, r, s);
+    const tx = await user2.accuToken.delegateBySig(user4.address, nonce, expiration, v, r, s);
 
     // Check tx success and DelegateChanged for voting
     await expect(Promise.resolve(tx))
-      .to.emit(aaveInstance, 'DelegateChanged')
-      .withArgs(user2.address, user4.address, 1);
+      .to.emit(accuToken, 'DelegateChanged')
+      .withArgs(user2.address, user4.address, DelegationType.PROPOSITION_POWER);
     // Check tx success and DelegateChanged for proposition
     await expect(Promise.resolve(tx))
-      .to.emit(aaveInstance, 'DelegateChanged')
-      .withArgs(user2.address, user4.address, 0);
+      .to.emit(accuToken, 'DelegateChanged')
+      .withArgs(user2.address, user4.address, DelegationType.VOTING_POWER);
 
     // Check DelegatedPowerChanged event: users[2] power should drop to zero
     await expect(Promise.resolve(tx))
-      .to.emit(aaveInstance, 'DelegatedPowerChanged')
-      .withArgs(user2.address, 0, 1);
+      .to.emit(accuToken, 'DelegatedPowerChanged')
+      .withArgs(user2.address, 0, DelegationType.PROPOSITION_POWER);
 
     // Check DelegatedPowerChanged event: users[4] power should increase to expectedVotingPower
     await expect(Promise.resolve(tx))
-      .to.emit(aaveInstance, 'DelegatedPowerChanged')
-      .withArgs(user4.address, expectedPropPower, 1);
+      .to.emit(accuToken, 'DelegatedPowerChanged')
+      .withArgs(user4.address, expectedPropPower, DelegationType.PROPOSITION_POWER);
 
     // Check DelegatedPowerChanged event: users[2] power should drop to zero
     await expect(Promise.resolve(tx))
-      .to.emit(aaveInstance, 'DelegatedPowerChanged')
-      .withArgs(user2.address, user2ExpectedVotPower, 0);
+      .to.emit(accuToken, 'DelegatedPowerChanged')
+      .withArgs(user2.address, user2ExpectedVotPower, DelegationType.VOTING_POWER);
 
     // Check DelegatedPowerChanged event: users[4] power should increase to expectedVotingPower
     await expect(Promise.resolve(tx))
-      .to.emit(aaveInstance, 'DelegatedPowerChanged')
-      .withArgs(user4.address, user4ExpectedVotPower, 0);
+      .to.emit(accuToken, 'DelegatedPowerChanged')
+      .withArgs(user4.address, user4ExpectedVotPower, DelegationType.VOTING_POWER);
 
     // Check internal state matches events
-    const propDelegatee = await aaveInstance.getDelegateeByType(user2.address, '1');
-    expect(propDelegatee.toString()).to.be.equal(
-      user4.address,
-      'Proposition delegatee should be user 4'
-    );
+    const propDelegatee = await accuToken.getDelegateeByType(user2.address, DelegationType.PROPOSITION_POWER);
+    expect(propDelegatee.toString()).to.be.equal(user4.address, 'Proposition delegatee should be user 4');
 
-    const votDelegatee = await aaveInstance.getDelegateeByType(user2.address, '0');
+    const votDelegatee = await accuToken.getDelegateeByType(user2.address, DelegationType.VOTING_POWER);
     expect(votDelegatee.toString()).to.be.equal(user4.address, 'Voting delegatee should be user 4');
 
-    const user4PropositionPower = await aaveInstance.getPowerCurrent(user4.address, '1');
-    expect(user4PropositionPower).to.be.equal(
-      expectedPropPower,
-      'Delegatee should have propostion power from user 2'
-    );
-    const user4VotingPower = await aaveInstance.getPowerCurrent(user4.address, '0');
-    expect(user4VotingPower).to.be.equal(
-      user4ExpectedVotPower,
-      'Delegatee should have votinh power from user 2'
-    );
+    const user4PropositionPower = await accuToken.getPowerCurrent(user4.address, DelegationType.PROPOSITION_POWER);
+    expect(user4PropositionPower).to.be.equal(expectedPropPower, 'Delegatee should have propostion power from user2');
+    const user4VotingPower = await accuToken.getPowerCurrent(user4.address, DelegationType.VOTING_POWER);
+    expect(user4VotingPower).to.be.equal(user4ExpectedVotPower, 'Delegatee should have votinh power from user2');
 
-    const user2PropositionPower = await aaveInstance.getPowerCurrent(user2.address, '1');
-    expect(user2PropositionPower).to.be.equal('0', 'User 2 should have zero prop power');
-    const user2VotingPower = await aaveInstance.getPowerCurrent(user2.address, '0');
+    const user2PropositionPower = await accuToken.getPowerCurrent(user2.address, DelegationType.PROPOSITION_POWER);
+    expect(user2PropositionPower).to.be.equal(Zero, 'user2 should have zero prop power');
+    const user2VotingPower = await accuToken.getPowerCurrent(user2.address, DelegationType.VOTING_POWER);
     expect(user2VotingPower).to.be.equal(
       user2ExpectedVotPower,
-      'User 2 should still have voting power from user 1 delegation'
+      'user2 should still have voting power from user1 delegation'
     );
   });
 
-  it('User 1 should not be able to delegate with bad signature', async () => {
-    const {
-      users: [, user1, user2],
-    } = testEnv;
-
-    // Prepare params to sign message
-    const {chainId} = await DRE.ethers.provider.getNetwork();
-    if (!chainId) {
-      fail("Current network doesn't have CHAIN ID");
-    }
-    const nonce = (await aaveInstance._nonces(user1.address)).toString();
-    const expiration = MAX_UINT_AMOUNT;
-    const msgParams = buildDelegateByTypeParams(
-      chainId,
-      aaveInstance.address,
-      user2.address,
-      '0',
+  it('user1 should not be able to delegate with bad signature', async () => {
+    const {accuToken, user1, user2} = fixture;
+    const nonce = await accuToken._nonces(user1.address);
+    const expiration = MaxUint256;
+    const value = {
+      delegatee: user2.address,
+      type: DelegationType.VOTING_POWER,
       nonce,
-      expiration
-    );
-    const ownerPrivateKey = require('../test-wallets.js').accounts[1].secretKey;
-    if (!ownerPrivateKey) {
-      throw new Error('INVALID_OWNER_PK');
-    }
+      expiry: expiration,
+    };
+    const sig = await user1.signer._signTypedData(domain, delegateByTypeTypes, value);
+    const {r, s} = utils.splitSignature(sig);
 
-    const {r, s} = getSignatureFromTypedData(ownerPrivateKey, msgParams);
-
-    // Transmit message via delegateByTypeBySig
     await expect(
-      aaveInstance
-        .connect(user1.signer)
-        .delegateByTypeBySig(user2.address, '0', nonce, expiration, 0, r, s)
+      user1.accuToken.delegateByTypeBySig(user2.address, DelegationType.VOTING_POWER, nonce, expiration, 0, r, s)
     ).to.be.revertedWith('INVALID_SIGNATURE');
   });
 
-  it('User 1 should not be able to delegate with bad nonce', async () => {
-    const {
-      users: [, user1, user2],
-    } = testEnv;
+  it('user1 should not be able to delegate with bad nonce', async () => {
+    const {user1, user2} = fixture;
+    const nonce = Zero;
+    const expiration = MaxUint256;
+    const value = {
+      delegatee: user2.address,
+      type: DelegationType.VOTING_POWER,
+      nonce,
+      expiry: expiration,
+    };
+    const sig = await user1.signer._signTypedData(domain, delegateByTypeTypes, value);
+    const {v, r, s} = utils.splitSignature(sig);
 
-    // Prepare params to sign message
-    const {chainId} = await DRE.ethers.provider.getNetwork();
-    if (!chainId) {
-      fail("Current network doesn't have CHAIN ID");
-    }
-    const expiration = MAX_UINT_AMOUNT;
-    const msgParams = buildDelegateByTypeParams(
-      chainId,
-      aaveInstance.address,
-      user2.address,
-      '0',
-      MAX_UINT_AMOUNT, // bad nonce
-      expiration
-    );
-    const ownerPrivateKey = require('../test-wallets.js').accounts[1].secretKey;
-    if (!ownerPrivateKey) {
-      throw new Error('INVALID_OWNER_PK');
-    }
-
-    const {v, r, s} = getSignatureFromTypedData(ownerPrivateKey, msgParams);
-
-    // Transmit message via delegateByTypeBySig
     await expect(
-      aaveInstance
-        .connect(user1.signer)
-        .delegateByTypeBySig(user2.address, '0', MAX_UINT_AMOUNT, expiration, v, r, s)
+      user1.accuToken.delegateByTypeBySig(user2.address, DelegationType.VOTING_POWER, nonce, expiration, v, r, s)
     ).to.be.revertedWith('INVALID_NONCE');
   });
 
-  it('User 1 should not be able to delegate if signature expired', async () => {
-    const {
-      users: [, user1, user2],
-    } = testEnv;
-
-    // Prepare params to sign message
-    const {chainId} = await DRE.ethers.provider.getNetwork();
-    if (!chainId) {
-      fail("Current network doesn't have CHAIN ID");
-    }
-    const nonce = (await aaveInstance._nonces(user1.address)).toString();
-    const expiration = '0';
-    const msgParams = buildDelegateByTypeParams(
-      chainId,
-      aaveInstance.address,
-      user2.address,
-      '0',
+  it('user1 should not be able to delegate if signature expired', async () => {
+    const {accuToken, user1, user2} = fixture;
+    const nonce = await accuToken._nonces(user1.address);
+    const expiration = Zero;
+    const value = {
+      delegatee: user2.address,
+      type: DelegationType.VOTING_POWER,
       nonce,
-      expiration
-    );
-    const ownerPrivateKey = require('../test-wallets.js').accounts[2].secretKey;
-    if (!ownerPrivateKey) {
-      throw new Error('INVALID_OWNER_PK');
-    }
+      expiry: expiration,
+    };
+    const sig = await user1.signer._signTypedData(domain, delegateByTypeTypes, value);
+    const {v, r, s} = utils.splitSignature(sig);
 
-    const {v, r, s} = getSignatureFromTypedData(ownerPrivateKey, msgParams);
-
-    // Transmit message via delegateByTypeBySig
     await expect(
-      aaveInstance
-        .connect(user1.signer)
-        .delegateByTypeBySig(user2.address, '0', nonce, expiration, v, r, s)
+      user1.accuToken.delegateByTypeBySig(user2.address, DelegationType.VOTING_POWER, nonce, expiration, v, r, s)
     ).to.be.revertedWith('INVALID_EXPIRATION');
   });
 
-  it('User 2 should not be able to delegate all with bad signature', async () => {
-    const {
-      users: [, , user2, , user4],
-    } = testEnv;
-    // Prepare parameters to sign message
-    const {chainId} = await DRE.ethers.provider.getNetwork();
-    if (!chainId) {
-      fail("Current network doesn't have CHAIN ID");
-    }
-    const nonce = (await aaveInstance._nonces(user2.address)).toString();
-    const expiration = MAX_UINT_AMOUNT;
-    const msgParams = buildDelegateParams(
-      chainId,
-      aaveInstance.address,
-      user4.address,
-      nonce,
-      expiration
-    );
-    const ownerPrivateKey = require('../test-wallets.js').accounts[3].secretKey;
-    if (!ownerPrivateKey) {
-      throw new Error('INVALID_OWNER_PK');
-    }
-    const {v, r, s} = getSignatureFromTypedData(ownerPrivateKey, msgParams);
+  it('user2 should not be able to delegate all with bad signature', async () => {
+    const {accuToken, user4, user2} = fixture;
 
-    // Transmit tx via delegateBySig
-    await expect(
-      aaveInstance.connect(user2.signer).delegateBySig(user4.address, nonce, expiration, '0', r, s)
-    ).to.be.revertedWith('INVALID_SIGNATURE');
+    const nonce = (await accuToken._nonces(user2.address)).toString();
+    const expiration = MaxUint256;
+    const value = {
+      delegatee: user4.address,
+      nonce,
+      expiry: expiration,
+    };
+    const sig = await user2.signer._signTypedData(domain, delegateTypes, value);
+    const {r, s} = utils.splitSignature(sig);
+
+    await expect(user2.accuToken.delegateBySig(user4.address, nonce, expiration, Zero, r, s)).to.be.revertedWith(
+      'INVALID_SIGNATURE'
+    );
   });
 
-  it('User 2 should not be able to delegate all with bad nonce', async () => {
-    const {
-      users: [, , user2, , user4],
-    } = testEnv;
-    // Prepare parameters to sign message
-    const {chainId} = await DRE.ethers.provider.getNetwork();
-    if (!chainId) {
-      fail("Current network doesn't have CHAIN ID");
-    }
-    const nonce = MAX_UINT_AMOUNT;
-    const expiration = MAX_UINT_AMOUNT;
-    const msgParams = buildDelegateParams(
-      chainId,
-      aaveInstance.address,
-      user4.address,
+  it('user2 should not be able to delegate all with bad nonce', async () => {
+    const {user2, user4} = fixture;
+    const nonce = Zero;
+    const expiration = MaxUint256;
+    const value = {
+      delegatee: user4.address,
       nonce,
-      expiration
-    );
-    const ownerPrivateKey = require('../test-wallets.js').accounts[3].secretKey;
-    if (!ownerPrivateKey) {
-      throw new Error('INVALID_OWNER_PK');
-    }
-    const {v, r, s} = getSignatureFromTypedData(ownerPrivateKey, msgParams);
+      expiry: expiration,
+    };
+    const sig = await user2.signer._signTypedData(domain, delegateTypes, value);
+    const {v, r, s} = utils.splitSignature(sig);
 
-    // Transmit tx via delegateByTypeBySig
-    await expect(
-      aaveInstance.connect(user2.signer).delegateBySig(user4.address, nonce, expiration, v, r, s)
-    ).to.be.revertedWith('INVALID_NONCE');
+    await expect(user2.accuToken.delegateBySig(user4.address, nonce, expiration, v, r, s)).to.be.revertedWith(
+      'INVALID_NONCE'
+    );
   });
 
-  it('User 2 should not be able to delegate all if signature expired', async () => {
-    const {
-      users: [, , user2, , user4],
-    } = testEnv;
-    // Prepare parameters to sign message
-    const {chainId} = await DRE.ethers.provider.getNetwork();
-    if (!chainId) {
-      fail("Current network doesn't have CHAIN ID");
-    }
-    const nonce = (await aaveInstance._nonces(user2.address)).toString();
-    const expiration = '0';
-    const msgParams = buildDelegateParams(
-      chainId,
-      aaveInstance.address,
-      user4.address,
+  it('user2 should not be able to delegate all if signature expired', async () => {
+    const {accuToken, user2, user4} = fixture;
+    const nonce = await accuToken._nonces(user2.address);
+    const expiration = Zero;
+    const value = {
+      delegatee: user4.address,
       nonce,
-      expiration
-    );
-    const ownerPrivateKey = require('../test-wallets.js').accounts[3].secretKey;
-    if (!ownerPrivateKey) {
-      throw new Error('INVALID_OWNER_PK');
-    }
-    const {v, r, s} = getSignatureFromTypedData(ownerPrivateKey, msgParams);
+      expiry: expiration,
+    };
+    const sig = await user2.signer._signTypedData(domain, delegateTypes, value);
+    const {v, r, s} = utils.splitSignature(sig);
 
-    // Transmit tx via delegateByTypeBySig
-    await expect(
-      aaveInstance.connect(user2.signer).delegateBySig(user4.address, nonce, expiration, v, r, s)
-    ).to.be.revertedWith('INVALID_EXPIRATION');
+    await expect(user2.accuToken.delegateBySig(user4.address, nonce, expiration, v, r, s)).to.be.revertedWith(
+      'INVALID_EXPIRATION'
+    );
   });
 
-  it('Checks the delegation at the block of the second saved action', async () => {
-    const {users} = testEnv;
+  it('checks the delegation at the block of the second saved action', async () => {
+    const {accuToken, user1, user2, user3} = fixture;
 
-    const user1 = users[1];
-    const user2 = users[2];
-    const user3 = users[3];
-
-    const user1VotingPower = await aaveInstance.getPowerAtBlock(
+    const user1VotingPower = await accuToken.getPowerAtBlock(
       user1.address,
       secondActionBlockNumber,
-      '0'
+      DelegationType.VOTING_POWER
     );
-    const user1PropPower = await aaveInstance.getPowerAtBlock(
+    const user1PropPower = await accuToken.getPowerAtBlock(
       user1.address,
       secondActionBlockNumber,
-      '1'
+      DelegationType.PROPOSITION_POWER
     );
 
-    const user2VotingPower = await aaveInstance.getPowerAtBlock(
+    const user2VotingPower = await accuToken.getPowerAtBlock(
       user2.address,
       secondActionBlockNumber,
-      '0'
+      DelegationType.VOTING_POWER
     );
-    const user2PropPower = await aaveInstance.getPowerAtBlock(
+    const user2PropPower = await accuToken.getPowerAtBlock(
       user2.address,
       secondActionBlockNumber,
-      '1'
+      DelegationType.PROPOSITION_POWER
     );
 
-    const user3VotingPower = await aaveInstance.getPowerAtBlock(
+    const user3VotingPower = await accuToken.getPowerAtBlock(
       user3.address,
       secondActionBlockNumber,
-      '0'
+      DelegationType.VOTING_POWER
     );
-    const user3PropPower = await aaveInstance.getPowerAtBlock(
+    const user3PropPower = await accuToken.getPowerAtBlock(
       user3.address,
       secondActionBlockNumber,
-      '1'
+      DelegationType.PROPOSITION_POWER
     );
 
-    const expectedUser1DelegatedVotingPower = '0';
-    const expectedUser1DelegatedPropPower = '0';
+    const expectedUser1DelegatedVotingPower = Zero;
+    const expectedUser1DelegatedPropPower = Zero;
 
-    const expectedUser2DelegatedVotingPower = parseEther('1');
-    const expectedUser2DelegatedPropPower = '0';
+    const expectedUser2DelegatedVotingPower = utils.parseEther('1');
+    const expectedUser2DelegatedPropPower = Zero;
 
-    const expectedUser3DelegatedVotingPower = parseEther('2');
-    const expectedUser3DelegatedPropPower = parseEther('3');
+    const expectedUser3DelegatedVotingPower = utils.parseEther('2');
+    const expectedUser3DelegatedPropPower = utils.parseEther('3');
 
-    expect(user1VotingPower.toString()).to.be.equal(
-      expectedUser1DelegatedPropPower,
-      'Invalid voting power for user 1'
-    );
-    expect(user1PropPower.toString()).to.be.equal(
-      expectedUser1DelegatedVotingPower,
-      'Invalid prop power for user 1'
-    );
+    expect(user1VotingPower.toString()).to.be.equal(expectedUser1DelegatedPropPower, 'Invalid voting power for user1');
+    expect(user1PropPower.toString()).to.be.equal(expectedUser1DelegatedVotingPower, 'Invalid prop power for user1');
 
     expect(user2VotingPower.toString()).to.be.equal(
       expectedUser2DelegatedVotingPower,
-      'Invalid voting power for user 2'
+      'Invalid voting power for user2'
     );
-    expect(user2PropPower.toString()).to.be.equal(
-      expectedUser2DelegatedPropPower,
-      'Invalid prop power for user 2'
-    );
+    expect(user2PropPower.toString()).to.be.equal(expectedUser2DelegatedPropPower, 'Invalid prop power for user2');
 
     expect(user3VotingPower.toString()).to.be.equal(
       expectedUser3DelegatedVotingPower,
-      'Invalid voting power for user 3'
+      'Invalid voting power for user3'
     );
-    expect(user3PropPower.toString()).to.be.equal(
-      expectedUser3DelegatedPropPower,
-      'Invalid prop power for user 3'
-    );
+    expect(user3PropPower.toString()).to.be.equal(expectedUser3DelegatedPropPower, 'Invalid prop power for user3');
   });
 
-  it('Correct proposal and voting snapshotting on double action in the same block', async () => {
-    const {
-      users: [, user1, receiver],
-    } = testEnv;
+  it('correct proposal and voting snapshotting on double action in the same block', async () => {
+    const {accuToken, user1, user5} = fixture;
 
     // Reset delegations
-    await aaveInstance.connect(user1.signer).delegate(user1.address);
-    await aaveInstance.connect(receiver.signer).delegate(receiver.address);
+    await user1.accuToken.delegate(user1.address);
+    await user5.accuToken.delegate(user5.address);
 
-    const user1PriorBalance = await aaveInstance.balanceOf(user1.address);
-    const receiverPriorPower = await aaveInstance.getPowerCurrent(receiver.address, '0');
-    const user1PriorPower = await aaveInstance.getPowerCurrent(user1.address, '0');
+    const user1PriorBalance = await accuToken.balanceOf(user1.address);
+    const receiverPriorPower = await accuToken.getPowerCurrent(user5.address, DelegationType.VOTING_POWER);
+    const user1PriorPower = await accuToken.getPowerCurrent(user1.address, DelegationType.VOTING_POWER);
+
+    expect(user1PriorBalance).to.be.gt(Zero);
 
     // Deploy double transfer helper
-    const doubleTransferHelper = await deployDoubleTransferHelper(aaveInstance.address);
+    const mockDoubleTransfer = await deployMockDoubleTransfer(hre, accuToken.address);
 
-    await waitForTx(
-      await aaveInstance
-        .connect(user1.signer)
-        .transfer(doubleTransferHelper.address, user1PriorBalance)
-    );
+    await waitForTx(await user1.accuToken.transfer(mockDoubleTransfer.address, user1PriorBalance));
 
     // Do double transfer
     await waitForTx(
-      await doubleTransferHelper
+      await mockDoubleTransfer
         .connect(user1.signer)
-        .doubleSend(receiver.address, user1PriorBalance.sub(parseEther('1')), parseEther('1'))
+        .doubleSend(user5.address, user1PriorBalance.sub(utils.parseEther('1')), utils.parseEther('1'))
     );
 
-    const receiverCurrentPower = await aaveInstance.getPowerCurrent(receiver.address, '0');
-    const user1CurrentPower = await aaveInstance.getPowerCurrent(user1.address, '0');
+    const receiverCurrentPower = await accuToken.getPowerCurrent(user5.address, DelegationType.VOTING_POWER);
+    const user1CurrentPower = await accuToken.getPowerCurrent(user1.address, DelegationType.VOTING_POWER);
 
     expect(receiverCurrentPower).to.be.equal(
       user1PriorPower.add(receiverPriorPower),
       'Receiver should have added the user1 power after double transfer'
     );
-    expect(user1CurrentPower).to.be.equal(
-      '0',
-      'User1 power should be zero due transfered all the funds'
-    );
+    expect(user1CurrentPower).to.be.equal(Zero, 'User1 power should be zero due transfered all the funds');
   });
 });
