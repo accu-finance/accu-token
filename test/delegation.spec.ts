@@ -1,10 +1,10 @@
-import { waffleChai } from '@ethereum-waffle/chai';
-import { TypedDataDomain } from '@ethersproject/abstract-signer';
-import { expect, use } from 'chai';
-import hre, { ethers } from 'hardhat';
-import { DelegationType, Fixture } from '../types';
-import { deployMockDoubleTransfer } from '../utils/contractDeployer';
-import { advanceTimeAndBlock, waitForTx } from '../utils/hhNetwork';
+import {waffleChai} from '@ethereum-waffle/chai';
+import {TypedDataDomain} from '@ethersproject/abstract-signer';
+import {expect, use} from 'chai';
+import hre, {ethers} from 'hardhat';
+import {DelegationType, Fixture} from '../types';
+import {deployMockDoubleTransfer} from '../utils/contractDeployer';
+import {advanceTimeAndBlock, waitForTx} from '../utils/hhNetwork';
 import setupFixture from '../utils/setupFixture';
 
 const {Zero, MaxUint256, AddressZero} = ethers.constants;
