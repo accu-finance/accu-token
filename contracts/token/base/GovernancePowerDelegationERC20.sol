@@ -9,7 +9,7 @@ import {
 
 /**
  * @notice implementation of the ACCU token contract
- * @author ACCU
+ * @author Aave (modified by Accu)
  */
 abstract contract GovernancePowerDelegationERC20 is ERC20, IGovernancePowerDelegationToken {
   using SafeMath for uint256;

@@ -1,10 +1,10 @@
-import {waffleChai} from '@ethereum-waffle/chai';
-import {TypedDataDomain} from '@ethersproject/abstract-signer';
-import {expect, use} from 'chai';
-import hre, {ethers} from 'hardhat';
-import {DelegationType, Fixture} from '../types';
-import {deployDoubleTransferHelper} from '../utils/contractDeployer';
-import {advanceTimeAndBlock, waitForTx} from '../utils/hhNetwork';
+import { waffleChai } from '@ethereum-waffle/chai';
+import { TypedDataDomain } from '@ethersproject/abstract-signer';
+import { expect, use } from 'chai';
+import hre, { ethers } from 'hardhat';
+import { DelegationType, Fixture } from '../types';
+import { deployMockDoubleTransfer } from '../utils/contractDeployer';
+import { advanceTimeAndBlock, waitForTx } from '../utils/hhNetwork';
 import setupFixture from '../utils/setupFixture';
 
 const {Zero, MaxUint256, AddressZero} = ethers.constants;
@@ -194,7 +194,7 @@ describe('Delegation', () => {
     expect(user3PropPower).to.be.equal(expectedUser3DelegatedPropPower, 'Invalid prop power for user3');
   });
 
-  it('Checks the delegation at the block of the first action', async () => {
+  it('checks the delegation at the block of the first action', async () => {
     const {accuToken, user1, user2, user3} = fixture;
 
     const user1VotingPower = await accuToken.getPowerAtBlock(
@@ -249,7 +249,7 @@ describe('Delegation', () => {
     expect(user3PropPower).to.be.equal(expectedUser3DelegatedPropPower, 'Invalid prop power for user3');
   });
 
-  it('Ensure that getting the power at the current block is the same as using getPowerCurrent', async () => {
+  it('ensure that getting the power at the current block is the same as using getPowerCurrent', async () => {
     const {accuToken, user1} = fixture;
 
     await advanceTimeAndBlock(1);
@@ -280,7 +280,7 @@ describe('Delegation', () => {
     );
   });
 
-  it("Checks you can't fetch power at a block in the future", async () => {
+  it("checks you can't fetch power at a block in the future", async () => {
     const {accuToken, user1} = fixture;
 
     const currentBlock = await ethers.provider.getBlockNumber();
@@ -626,7 +626,7 @@ describe('Delegation', () => {
     );
   });
 
-  it('Checks the delegation at the block of the second saved action', async () => {
+  it('checks the delegation at the block of the second saved action', async () => {
     const {accuToken, user1, user2, user3} = fixture;
 
     const user1VotingPower = await accuToken.getPowerAtBlock(
@@ -687,7 +687,7 @@ describe('Delegation', () => {
     expect(user3PropPower.toString()).to.be.equal(expectedUser3DelegatedPropPower, 'Invalid prop power for user3');
   });
 
-  it('Correct proposal and voting snapshotting on double action in the same block', async () => {
+  it('correct proposal and voting snapshotting on double action in the same block', async () => {
     const {accuToken, user1, user5} = fixture;
 
     // Reset delegations
@@ -701,13 +701,13 @@ describe('Delegation', () => {
     expect(user1PriorBalance).to.be.gt(Zero);
 
     // Deploy double transfer helper
-    const doubleTransferHelper = await deployDoubleTransferHelper(hre, accuToken.address);
+    const mockDoubleTransfer = await deployMockDoubleTransfer(hre, accuToken.address);
 
-    await waitForTx(await user1.accuToken.transfer(doubleTransferHelper.address, user1PriorBalance));
+    await waitForTx(await user1.accuToken.transfer(mockDoubleTransfer.address, user1PriorBalance));
 
     // Do double transfer
     await waitForTx(
-      await doubleTransferHelper
+      await mockDoubleTransfer
         .connect(user1.signer)
         .doubleSend(user5.address, user1PriorBalance.sub(utils.parseEther('1')), utils.parseEther('1'))
     );

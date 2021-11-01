@@ -3,18 +3,26 @@
   "version": "1.0.0",
   "description": "Accu ERC20 token",
   "files": [
-    "contracts"
+    "abi",
+    "artifacts",
+    "contracts",
+    "deployments",
+    "exports",
+    "types"
   ],
   "scripts": {
-    "prepare": "node ./.setup.js && npm run compile",
+    "prepare": "node ./.setup.js && npx husky install && npm run compile",
     "lint": "eslint \"**/*.{js,ts}\" && solhint contracts/**/*.sol",
     "lint:fix": "eslint --fix \"**/*.{js,ts}\" && solhint --fix contracts/**/*.sol",
     "format": "npx prettier --check \"**/*.{ts,js,sol}\"",
     "format:fix": "npx prettier --write \"**/*.{ts,js,sol}\"",
-    "compile": "cross-env SKIP_LOAD=true hardhat compile",
+    "compile": "SKIP_LOAD=true hardhat compile",
     "test": "cross-env TS_NODE_TRANSPILE_ONLY=1 hardhat test",
     "coverage": "npx hardhat coverage --network hardhat",
-    "clean": "rm -rf ./artifacts ./cache ./typechain"
+    "localhost:node": "npx hardhat node --hostname 0.0.0.0 --no-deploy",
+    "localhost:deploy": "npx hardhat deploy --network localhost --tags testEnv",
+    "clean": "rm -rf typechain/ cache/ artifacts/",
+    "prepublishOnly": "npm run compile"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "npm:hardhat-deploy-ethers@^0.3.0-beta.10",
@@ -63,32 +71,7 @@
       "pre-commit": "pretty-quick --staged --pattern 'contracts/**/*.sol' --pattern '**/*.{ts,js}'"
     }
   },
-  "author": "Aave",
-  "contributors": [
-    {
-      "name": "Ernesto Boado",
-      "email": "ernesto@aave.com"
-    },
-    {
-      "name": "Emilio Frangella",
-      "email": "emilio@aave.com"
-    },
-    {
-      "name": "Andrey Kozlov",
-      "email": "andrey@aave.com"
-    },
-    {
-      "name": "David Racero",
-      "email": "david.k@aave.com"
-    },
-    {
-      "name": "Hadrien Charlanes",
-      "email": "hadrien@aave.com"
-    }
-  ],
-  "license": "AGPLv3",
-  "dependencies": {},
-  "publishConfig": {
-    "@aave-tech:registry": "https://gitlab.com/api/v4/projects/19392283/packages/npm/"
-  }
+  "author": "",
+  "contributors": [],
+  "license": "AGPLv3"
 }

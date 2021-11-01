@@ -1,5 +1,5 @@
 import {HardhatRuntimeEnvironment} from 'hardhat/types';
-import {AccuToken, DoubleTransferHelper, InitializableAdminUpgradeabilityProxy, MockAccuTokenV2} from '../typechain';
+import {AccuToken, InitializableAdminUpgradeabilityProxy, MockAccuTokenV2, MockDoubleTransfer} from '../typechain';
 import {Address, ContractId, ContractType} from '../types';
 import {getContractAt} from './contractGetter';
 import registerContractInJsonDb from './registerContractInJsonDb';
@@ -60,17 +60,17 @@ export const deployMockAccuTokenV2 = async (hre: HardhatRuntimeEnvironment): Pro
   return await getContractAt(hre, contract, result.address);
 };
 
-export const deployDoubleTransferHelper = async (
+export const deployMockDoubleTransfer = async (
   hre: HardhatRuntimeEnvironment,
   token: Address
-): Promise<DoubleTransferHelper> => {
+): Promise<MockDoubleTransfer> => {
   const {
     deployments: {deploy},
     getNamedAccounts,
     network,
   } = hre;
   const {deployer} = await getNamedAccounts();
-  const contract = ContractId.DoubleTransferHelper;
+  const contract = ContractId.MockDoubleTransfer;
   const result = await deploy(contract, {
     from: deployer,
     contract,

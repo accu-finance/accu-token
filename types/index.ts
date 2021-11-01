@@ -5,7 +5,7 @@ export enum ContractId {
   AccuToken = 'AccuToken',
   InitializableAdminUpgradeabilityProxy = 'InitializableAdminUpgradeabilityProxy',
   MockAccuTokenV2 = 'MockAccuTokenV2',
-  DoubleTransferHelper = 'DoubleTransferHelper',
+  MockDoubleTransfer = 'MockDoubleTransfer',
 }
 
 export enum ContractType {

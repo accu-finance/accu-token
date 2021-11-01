@@ -36,7 +36,7 @@ describe('ACCU Token', () => {
     };
   });
 
-  it('Checks initial configuration', async () => {
+  it('checks initial configurations', async () => {
     const {accuToken} = fixture;
 
     expect(await accuToken.name()).to.be.equal('Accu Token', 'Invalid token name');
@@ -44,7 +44,7 @@ describe('ACCU Token', () => {
     expect(await accuToken.decimals()).to.be.equal(18, 'Invalid token decimals');
   });
 
-  it('Checks the domain separator', async () => {
+  it('checks the domain separator', async () => {
     const {accuToken, chainId} = fixture;
     const EIP712_DOMAIN = utils.keccak256(
       utils.toUtf8Bytes('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)')
@@ -64,13 +64,13 @@ describe('ACCU Token', () => {
     expect(await accuToken.DOMAIN_SEPARATOR()).to.be.equal(domainSeparator, 'Invalid domain separator');
   });
 
-  it('Checks the revision', async () => {
+  it('checks the revision', async () => {
     const {accuToken} = fixture;
 
     expect((await accuToken.REVISION()).toString()).to.be.equal('1', 'Invalid revision');
   });
 
-  it('Reverts submitting a permit with 0 expiration', async () => {
+  it('reverted: submitting a permit with 0 expiration', async () => {
     const {accuToken, deployer, user1} = fixture;
     const owner = deployer.address;
     const spender = user1.address;
@@ -94,7 +94,7 @@ describe('ACCU Token', () => {
     expect(await accuToken.allowance(owner, spender)).to.be.equal(Zero, 'INVALID_ALLOWANCE_AFTER_PERMIT');
   });
 
-  it('Submits a permit with maximum expiration length', async () => {
+  it('submits a permit with maximum expiration length', async () => {
     const {accuToken, deployer, user1} = fixture;
     const owner = deployer.address;
     const spender = user1.address;
@@ -117,7 +117,7 @@ describe('ACCU Token', () => {
     expect(await accuToken._nonces(owner)).to.be.equal(BigNumber.from(1));
   });
 
-  it('Cancels the previous permit', async () => {
+  it('cancels the previous permit', async () => {
     const {accuToken, deployer, user1} = fixture;
     const owner = deployer.address;
     const spender = user1.address;
@@ -141,7 +141,7 @@ describe('ACCU Token', () => {
     expect(await accuToken._nonces(owner)).to.be.equal(BigNumber.from(2));
   });
 
-  it('Tries to submit a permit with invalid nonce', async () => {
+  it('reverted: submit a permit with invalid nonce', async () => {
     const {accuToken, deployer, user1} = fixture;
     const owner = deployer.address;
     const spender = user1.address;
@@ -164,7 +164,7 @@ describe('ACCU Token', () => {
     );
   });
 
-  it('Tries to submit a permit with invalid expiration (previous to the current block)', async () => {
+  it('reverted: submit a permit with invalid expiration (previous to the current block)', async () => {
     const {accuToken, deployer, user1} = fixture;
     const owner = deployer.address;
     const spender = user1.address;
@@ -187,7 +187,7 @@ describe('ACCU Token', () => {
     );
   });
 
-  it('Tries to submit a permit with invalid signature', async () => {
+  it('reverted: submit a permit with invalid signature', async () => {
     const {accuToken, deployer, user1, user2} = fixture;
     const owner = deployer.address;
     const spender = user1.address;
@@ -216,7 +216,7 @@ describe('ACCU Token', () => {
     );
   });
 
-  it('Tries to submit a permit with invalid owner', async () => {
+  it('reverted: submit a permit with invalid owner', async () => {
     const {accuToken, deployer, user1} = fixture;
     const owner = deployer.address;
     const spender = user1.address;
@@ -239,13 +239,13 @@ describe('ACCU Token', () => {
     );
   });
 
-  it('Checks the total supply', async () => {
+  it('checks the total supply', async () => {
     const {accuToken} = fixture;
     const totalSupply = await accuToken.totalSupplyAt('0');
     expect(totalSupply).equal(utils.parseEther('10000000'));
   });
 
-  it('Updates the implementation of the Accu token to V2', async () => {
+  it('updates the implementation of the Accu token to V2', async () => {
     const {admin, accuToken} = fixture;
 
     const totalSupply = await accuToken.totalSupply();

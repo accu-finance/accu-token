@@ -9,7 +9,7 @@ import {SafeMath} from '../open-zeppelin/SafeMath.sol';
 
 /**
  * @notice implementation of the ACCU token contract
- * @author Accu
+ * @author Aave (modified by Accu)
  */
 contract MockAccuTokenV2 is GovernancePowerDelegationERC20, VersionedInitializable {
   using SafeMath for uint256;
